@@ -1,51 +1,19 @@
 import { Fragment } from "toad.jsx/jsx-runtime"
 
-/*
-
-TODO: IT'S TIME TO CLEAR UP THIS MESS
-[ ] instead of passing indiviual models around, group them into a class and pass that around
-    it will be basically like a bunch of global variables. but at the moment i'm not sure
-    how all the parts of the app will relate to each other
-[ ] render, UpdateManager, ...
-    * have something like setRenderer(...) which is called when a tab is activated
-    * Tab has visibilityChange(state: "visible" | "hidden") property
-    * it will need the canvas and the overlay
-    * name... RenderView?, GLView? => WE NOW HAVE 'GlView'
-[ ] get rid of the ui/ directory and instead clean up the root directory to match the UI structure
-    application/
-      file/
-      morph/
-      proxy/
-      pose/
-      expression/
-      mediapipe/
-      chordata/
-      glview/
-    makehuman/ ;; all the code from makehuman
-    main.tsx   ;; an no other files to make it prominent!
-*/
-
-import { SliderNode } from './modifier/loadSliders'
 import { ProxyType } from 'proxy/Proxy'
-import { SliderTreeAdapter } from 'ui/morphView'
 import { TAB } from 'HistoryManager'
 
 import { FileSystemAdapter } from './filesystem/FileSystemAdapter'
 import { HTTPFSAdapter } from './filesystem/HTTPFSAdapter'
 
-import { Table } from 'toad.js/table/Table'
-import { TreeNodeModel } from 'toad.js/table/model/TreeNodeModel'
-import { TreeAdapter } from 'toad.js/table/adapter/TreeAdapter'
 import { Tab, Tabs } from 'toad.js/viewkit/Tab'
-import { StringArrayAdapter } from 'toad.js/table/adapter/StringArrayAdapter'
-import { StringArrayModel } from 'toad.js/table/model/StringArrayModel'
 import { Application, setRenderer } from 'Application'
 import { RenderHuman } from 'render/RenderHuman'
 import { RenderView } from 'render/RenderView'
-import { TableAdapter } from 'toad.js/table/adapter/TableAdapter'
 import { PoseTab } from 'pose/PoseTab'
 import { ViewportControls } from 'ui/ViewportControls'
 import { MannequinControls } from 'ui/MannequinControls'
+import { BodyControls } from 'ui/BodyControls'
 import { installMobileUI } from 'ui/MobileUI'
 
 const DEFAULT_MANNEQUIN_PROXY = 'female_generic'
@@ -68,9 +36,6 @@ async function run() {
     installMobileUI()
 
     const app = new Application()
-
-    TreeAdapter.register(SliderTreeAdapter, TreeNodeModel, SliderNode)
-    TableAdapter.register(StringArrayAdapter, StringArrayModel)
 
     // Start directly in the body editor.
     app.tabModel.value = TAB.MORPH
@@ -138,19 +103,7 @@ function MorphTab(props: { app: Application }) {
                 }}
             >
                 <MannequinControls app={props.app} />
-
-                <div
-                    style={{
-                        flex: '1 1 auto',
-                        minHeight: 0,
-                        overflow: 'hidden',
-                    }}
-                >
-                    <Table
-                        model={props.app.morphControls}
-                        style={{ width: '100%', height: '100%' }}
-                    />
-                </div>
+                <BodyControls app={props.app} />
             </div>
         </Tab>
     )

@@ -13,14 +13,8 @@ export default {
     },
     plugins: [
         typescript({
-            tsconfigOverride: {
-                compilerOptions: {
-                    module: "esnext",
-                    declaration: true
-                },
-                include: [ "src" ]
-            },
-            "useTsconfigDeclarationDir": true,
+            tsconfig: "./tsconfig.build.json",
+            useTsconfigDeclarationDir: true,
             sourceMap: true
         }),
         nodeResolve(),

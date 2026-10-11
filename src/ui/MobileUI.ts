@@ -69,6 +69,31 @@ function enhanceSelectPopup(host: HTMLElement, touch: boolean) {
     popup.style.maxHeight = touch ? '55vh' : '45vh'
     popup.style.overflowY = 'auto'
 
+    /*
+     * TOAD positions select popups as `position: fixed` using the select's
+     * viewport coordinates. That works acceptably on desktop, but on a
+     * scrollable iPad control panel the popup is left behind while the panel
+     * moves. On touch layouts, anchor the popup to the select itself instead.
+     *
+     * This keeps the menu directly below the field and makes it scroll with
+     * the Body/Pose panel rather than floating over the page.
+     */
+    if (touch) {
+        host.style.position = 'relative'
+        host.style.overflow = 'visible'
+
+        popup.style.position = 'absolute'
+        popup.style.left = '0'
+        popup.style.top = 'calc(100% + 4px)'
+        popup.style.right = 'auto'
+        popup.style.width = '100%'
+        popup.style.minWidth = '100%'
+        popup.style.maxWidth = '100%'
+        popup.style.boxSizing = 'border-box'
+        popup.style.zIndex = '200'
+        popup.style.opacity = '1'
+    }
+
     popup.querySelectorAll('li').forEach((item) => {
         const element = item as HTMLElement
         element.style.minHeight = touch ? '48px' : '34px'
@@ -198,7 +223,7 @@ export function installMobileUI() {
                 box-sizing: border-box;
             }
 
-            .pose-scroll-panel {
+                        .pose-scroll-panel {
                 padding: var(--app-panel-padding) !important;
                 box-sizing: border-box;
             }
@@ -213,6 +238,12 @@ export function installMobileUI() {
                 grid-template-columns: 104px 88px minmax(140px, 1fr) !important;
                 gap: 14px !important;
                 min-height: 44px;
+            }
+
+            .body-slider-row {
+                grid-template-columns: 140px 88px minmax(140px, 1fr) !important;
+                gap: 14px !important;
+                min-height: 48px;
             }
 
             .mannequin-control {
@@ -254,7 +285,8 @@ export function installMobileUI() {
                 }
 
                 .pose-axis-row,
-                .hand-slider-row {
+                .hand-slider-row,
+                .body-slider-row {
                     min-height: 52px;
                 }
             }
@@ -299,6 +331,10 @@ export function installMobileUI() {
                 .hand-slider-row {
                     grid-template-columns: 88px 82px minmax(120px, 1fr) !important;
                 }
+
+                .body-slider-row {
+                    grid-template-columns: 120px 82px minmax(120px, 1fr) !important;
+                }
             }
 
             @media (max-width: 560px) {
@@ -315,6 +351,11 @@ export function installMobileUI() {
 
                 .hand-slider-row {
                     grid-template-columns: 74px 76px minmax(90px, 1fr) !important;
+                    gap: 10px !important;
+                }
+
+                .body-slider-row {
+                    grid-template-columns: 100px 76px minmax(90px, 1fr) !important;
                     gap: 10px !important;
                 }
 

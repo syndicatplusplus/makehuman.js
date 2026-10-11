@@ -6,6 +6,8 @@ export interface PoseBoneOption {
 }
 
 export const POSE_BONE_OPTIONS: readonly PoseBoneOption[] = [
+    { value: 'none', label: 'None', pickBones: [], hitRadius: 0 },
+
     { value: 'root', label: 'Whole body', pickBones: ['root'], hitRadius: 45 },
     { value: 'spine01', label: 'Hips / lower torso', pickBones: ['pelvis.L', 'pelvis.R', 'spine01', 'spine02'], hitRadius: 60 },
     { value: 'spine03', label: 'Chest', pickBones: ['spine03', 'spine04', 'spine05'], hitRadius: 65 },

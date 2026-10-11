@@ -52,7 +52,7 @@ function PoseAxis(props: { label: string, model: NumberModel }) {
 export function PoseTab(props: { app: Application }) {
     const app = props.app
 
-    const boneModel = new OptionModel<string>('upperarm01.L', POSE_BONES)
+    const boneModel = new OptionModel<string>('none', POSE_BONES)
     const xModel = new NumberModel(0, { min: -180, max: 180, step: 1 })
     const yModel = new NumberModel(0, { min: -180, max: 180, step: 1 })
     const zModel = new NumberModel(0, { min: -180, max: 180, step: 1 })
@@ -60,7 +60,25 @@ export function PoseTab(props: { app: Application }) {
     let syncingControls = false
     let poseSelectMode: PoseSelectMode | undefined
 
+    const setAxisControlsEnabled = (enabled: boolean) => {
+        xModel.enabled = enabled
+        yModel.enabled = enabled
+        zModel.enabled = enabled
+    }
+
     const loadSelectedBone = () => {
+        if (boneModel.value === 'none') {
+            syncingControls = true
+            xModel.value = 0
+            yModel.value = 0
+            zModel.value = 0
+            syncingControls = false
+            setAxisControlsEnabled(false)
+            app.glview?.invalidate()
+            return
+        }
+
+        setAxisControlsEnabled(true)
         const bone = app.skeleton.getBone(boneModel.value)
         const rotation = matrix2euler(bone.matUserPoseRelative)
 
@@ -74,7 +92,7 @@ export function PoseTab(props: { app: Application }) {
     }
 
     const applySelectedBone = () => {
-        if (syncingControls) {
+        if (syncingControls || boneModel.value === 'none') {
             return
         }
 
@@ -90,6 +108,10 @@ export function PoseTab(props: { app: Application }) {
     }
 
     const resetSelectedBone = () => {
+        if (boneModel.value === 'none') {
+            return
+        }
+
         const bone = app.skeleton.getBone(boneModel.value)
         bone.matUserPoseGlobal = undefined
         mat4.identity(bone.matUserPoseRelative)
@@ -111,7 +133,13 @@ export function PoseTab(props: { app: Application }) {
 
         if (state === 'visible') {
             if (poseSelectMode === undefined) {
-                poseSelectMode = new PoseSelectMode(app, boneModel)
+                poseSelectMode = new PoseSelectMode(
+                    app,
+                    boneModel,
+                    xModel,
+                    yModel,
+                    zModel,
+                )
                 app.glview.pushInputHandler(poseSelectMode)
             }
             app.glview.invalidate()
@@ -145,8 +173,8 @@ export function PoseTab(props: { app: Application }) {
                 <h2 style={{ marginTop: 0 }}>Pose</h2>
 
                 <p style={{ lineHeight: '1.5' }}>
-                    Click a body part directly on the mannequin, or choose it from the list.
-                    Then use X, Y and Z to rotate the selected joint.
+                    Click a body part to select it. Click empty space to clear the selection
+                    and hide the gizmo. You can also choose None from the list.
                 </p>
 
                 <div style={{ margin: '20px 0 26px 0' }}>
@@ -179,8 +207,8 @@ export function PoseTab(props: { app: Application }) {
                         lineHeight: '1.45',
                     }}
                 >
-                    Left-click selects. Move the pointer over the mannequin to preview
-                    selectable regions. Middle-drag still orbits around the selected body part.
+                    Left-click selects. Empty-space click or Escape clears. Drag a colored
+                    ring to rotate that local axis. Middle-drag still orbits the camera.
                 </p>
             </div>
         </Tab>

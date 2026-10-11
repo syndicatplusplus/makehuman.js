@@ -31,7 +31,7 @@ import { stdout, exit } from "process"
 import { sep } from "path"
 import { zlibSync } from "fflate"
 
-const repository = "https://github.com/makehumancommunity/makehuman-assets.git"
+const repository = "https://github.com/s20220526/makehuman-assets.git"
 const branch = "master"
 
 const makehumanDir = getMakehumanDirName()
@@ -49,7 +49,7 @@ async function main() {
     if (!isDir("base/blendshapes")) {
         mkdirSync("base/blendshapes")
     }
-    await downloadARKitFaceBlendshapes()
+    // await downloadARKitFaceBlendshapes()
     await downloadICTFaceKitBlendshapes()
 
     checkGitLFS()

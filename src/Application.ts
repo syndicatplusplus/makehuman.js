@@ -25,7 +25,7 @@ import { RenderView } from "render/RenderView"
 import { mat4 } from "gl-matrix"
 import { di } from "lib/di"
 import { ARKitBlendshapeMesh } from "morphtool/ARKitBlendshapeMesh"
-import { computeBlendshapes } from "morphtool/MorphRenderer"
+/* import { computeBlendshapes } from "morphtool/MorphRenderer" */
 import { ComputedBlendshapeMesh } from "morphtool/ComputedBlendshapeMesh"
 import { BlazePoseModel } from "mediapipe/BlazePoseModel"
 import { TextModel } from "toad.js/appkit/TextModel"
@@ -52,7 +52,7 @@ export class Application {
 
     status = new TextModel("")
 
-    computedBlendShapes: ComputedBlendshapeMesh
+    computedBlendShapes!: ComputedBlendshapeMesh
     computedBlendShapesDebug?: {
         fxyzMH: ArrayLike<number>,
         xyzMH: Float32Array,
@@ -127,18 +127,6 @@ export class Application {
         })
 
         this.renderView = {} as any
-
-        // console.log("COMPUTE BLENDSHAPE")
-        try {
-            this.computedBlendShapesDebug = {} as any
-            this.computedBlendShapes = computeBlendshapes(
-                this.updateManager,
-                this.morphManager, this.skeleton, this.humanMesh, this.computedBlendShapesDebug)
-        } catch (e) {
-            console.log(e)
-            throw e
-        }
-        // console.log("COMPUTED BLENDSHAPE")
 
         // FIXME: OOP SMELL => replace ENUM with OBJECT
         this.tabModel = new EnumModel(TAB.PROXY, TAB)

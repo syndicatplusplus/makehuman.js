@@ -19,7 +19,7 @@
         "baseUrl": "src",
         "incremental": false,
         "jsx": "react-jsx",
-        "jsxImportSource": "toad.jsx/lib",
+        "jsxImportSource": "toad.jsx",
         "esModuleInterop": true,
         "experimentalDecorators": true,
         "downlevelIteration": true,

@@ -124,7 +124,7 @@ export class UpdateManager {
 
         this.updateMorphManager()
 
-        this.applyFaceBlendshapes()
+    //    this.applyFaceBlendshapes()
 
         this.applyFacePoseFromBlendShapes()
         this.updateBodyPoseFromBlazePose()

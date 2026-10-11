@@ -1,3 +1,5 @@
+import { Fragment } from "toad.jsx/jsx-runtime"
+
 /*
 
 TODO: IT'S TIME TO CLEAR UP THIS MESS
@@ -122,7 +124,7 @@ async function run() {
                     <ProxyTab app={app} />
                     {/* <PoseTab app={app} /> */}
                     {/* <BlendShapeTab app={app} /> */}
-                    <MorphTool app={app} />
+                    {/* <MorphTool app={app} /> */}
                     <BlazeTab app={app} />
                     <DevicesTab app={app} />
                     {/* <ExpressionTab app={app} /> */}
@@ -148,7 +150,7 @@ async function run() {
                     &nbsp;
                     <Display model={app.status} />
                 </div>
-            </>
+            </> as Fragment
         )
     )
 }

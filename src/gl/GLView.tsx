@@ -2,7 +2,7 @@ import { mat4, vec3 } from "gl-matrix"
 import type { Context } from "./input/Context"
 import type { InputHandler } from "./input/InputHandler"
 import { deg2rad } from "./algorithms/deg2rad"
-import { HTMLElementProps, ref } from "toad.jsx/lib/jsx-runtime"
+import { Fragment, HTMLElementProps, ref } from "toad.jsx/jsx-runtime"
 import { View } from "toad.js/viewkit/View"
 
 export interface GLViewProps extends HTMLElementProps {
@@ -27,7 +27,7 @@ export class GLView extends View {
         this.invalidate = this.invalidate.bind(this)
         this.paint = this.paint.bind(this)
 
-        this.replaceChildren(...<>
+        this.replaceChildren(...(<>
             <canvas
                 set={ref(this, 'canvas')}
                 style={{ width: '100%', height: '100%' }}
@@ -58,7 +58,7 @@ export class GLView extends View {
                     height: '100%',
                 }}
             ></svg>
-        </>)
+        </> as Fragment) )
         this.setupEventHandling()
         this.gl = this.canvas.getContext("webgl") as WebGL2RenderingContext
         if (this.gl === null) {

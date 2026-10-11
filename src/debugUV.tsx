@@ -1,4 +1,5 @@
 import { FileSystemAdapter } from "filesystem/FileSystemAdapter"
+import { Fragment } from "toad.jsx/jsx-runtime"
 
 // When exporting to Collada, I currently merge everything into a single mesh
 // and separate by Material, so that I only need to export one skeleton.
@@ -53,14 +54,13 @@ export function debugUV() {
     console.log(`teeth X: ${minX} : ${maxX}; Y: ${minY} : ${maxY}`)
 
     document.body.replaceChildren(
-        ...<>
-            <h1>UV</h1>
-            <svg width={1024} height={1024} style={{ border: "#fff 1px solid" }}>
-                {...drawQuads(teeth, uv)}
-            </svg>
-        </>
-    )
-}
+    ...(<>
+        <h1>UV</h1>
+        <svg width={1024} height={1024} style={{ border: "#fff 1px solid" }}>
+            {...drawQuads(teeth, uv)}
+        </svg>
+    </> as Fragment)
+)
 
 function drawQuads(faces: number[], uv: number[]) {
     let r = []
@@ -85,4 +85,5 @@ function drawQuads(faces: number[], uv: number[]) {
         r.push(<line x1={x3} y1={y3} x2={x0} y2={y0} stroke="#fff" />)
     }
     return r
+}
 }

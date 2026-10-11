@@ -10,7 +10,7 @@ import { Context } from 'gl/input/Context'
 import { ShaderShadedMono } from 'gl/shaders/ShaderShadedMono'
 import { Texture } from 'gl/Texture'
 import { InputHandler } from 'gl/input/InputHandler'
-import { HTMLElementProps } from 'toad.jsx/lib/jsx-runtime'
+import { HTMLElementProps } from 'toad.jsx/jsx-runtime'
 import { ShaderColored } from 'gl/shaders/ShaderColored'
 import { ShaderMono } from 'gl/shaders/ShaderMono'
 

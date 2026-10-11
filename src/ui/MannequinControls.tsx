@@ -33,6 +33,7 @@ export function MannequinControls(props: { app: Application }) {
 
     return (
         <div
+            class="mannequin-control"
             style={{
                 flex: '0 0 auto',
                 padding: '14px 14px 12px 14px',
@@ -40,6 +41,7 @@ export function MannequinControls(props: { app: Application }) {
             }}
         >
             <div
+                class="mannequin-control-row"
                 style={{
                     display: 'grid',
                     gridTemplateColumns: '110px 1fr',
@@ -55,6 +57,7 @@ export function MannequinControls(props: { app: Application }) {
             </div>
 
             <p
+                class="mannequin-help"
                 style={{
                     margin: '8px 0 0 122px',
                     opacity: 0.65,

@@ -38,12 +38,22 @@ interface GizmoRing {
     label: ScreenPoint
 }
 
+interface TouchPickCandidate {
+    pointerId: number
+    startX: number
+    startY: number
+    hit?: PickResult
+    moved: boolean
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
 const GIZMO_RADIUS = 58
 const GIZMO_OFFSET = 118
 const GIZMO_EDGE_MARGIN = 82
 const GIZMO_PICK_DISTANCE = 8
+const TOUCH_GIZMO_PICK_DISTANCE = 18
+const TOUCH_TAP_MOVE_THRESHOLD = 12
 const GIZMO_SEGMENTS = 64
 const GIZMO_DEGREES_PER_PIXEL = 0.75
 
@@ -142,6 +152,7 @@ export class PoseSelectMode extends InputHandler {
     private hoverValue?: string
     private hoverAxis?: GizmoAxis
     private gizmoDrag?: GizmoDrag
+    private touchPicks = new Map<number, TouchPickCandidate>()
 
     constructor(
         app: Application,
@@ -264,7 +275,28 @@ export class PoseSelectMode extends InputHandler {
             }
         }
 
-        // Otherwise treat the click as body-part selection.
+        // Touch taps select, while touch drags are reserved for viewport
+        // navigation. Delay the selection until pointer-up so a finger can
+        // naturally turn into an orbit gesture without selecting by accident.
+        if (ev.pointerType === 'touch') {
+            this.touchPicks.set(ev.pointerId, {
+                pointerId: ev.pointerId,
+                startX: ev.clientX,
+                startY: ev.clientY,
+                hit: this.pickBody(ev),
+                moved: false,
+            })
+
+            if (this.touchPicks.size > 1) {
+                for (const candidate of this.touchPicks.values()) {
+                    candidate.moved = true
+                }
+            }
+
+            return
+        }
+
+        // Mouse click body-part selection.
         const hit = this.pickBody(ev)
         if (hit === undefined) {
             this.clearSelection()
@@ -319,6 +351,30 @@ export class PoseSelectMode extends InputHandler {
             return
         }
 
+        if (ev.pointerType === 'touch') {
+            const candidate = this.touchPicks.get(ev.pointerId)
+            if (candidate !== undefined) {
+                const moved = Math.hypot(
+                    ev.clientX - candidate.startX,
+                    ev.clientY - candidate.startY,
+                )
+
+                if (moved >= TOUCH_TAP_MOVE_THRESHOLD) {
+                    candidate.moved = true
+                }
+
+                if (this.touchPicks.size > 1) {
+                    for (const other of this.touchPicks.values()) {
+                        other.moved = true
+                    }
+                }
+
+                // BasicMode gets the same event and performs the actual
+                // one-finger orbit / two-finger pan+pinch gesture.
+                return
+            }
+        }
+
         // Don't interfere with BasicMode while the user is orbiting.
         if (ev.buttons !== 0) {
             return
@@ -347,6 +403,30 @@ export class PoseSelectMode extends InputHandler {
     }
 
     override pointerup(ev: PointerEvent): void {
+        if (ev.pointerType === 'touch') {
+            const candidate = this.touchPicks.get(ev.pointerId)
+
+            if (candidate !== undefined) {
+                this.touchPicks.delete(ev.pointerId)
+
+                if (!candidate.moved) {
+                    if (candidate.hit === undefined) {
+                        this.clearSelection()
+                    } else {
+                        this.boneModel.value = candidate.hit.value
+                        this.hoverValue = undefined
+                        this.hoverAxis = undefined
+                        this.app.glview.canvas.style.cursor = ''
+                        this.app.glview.invalidate()
+                    }
+                }
+
+                // Do not preventDefault here. BasicMode must also see this
+                // pointer-up so it can clean up its active touch gesture.
+                return
+            }
+        }
+
         if (this.gizmoDrag === undefined) {
             return
         }
@@ -403,11 +483,16 @@ export class PoseSelectMode extends InputHandler {
                     segment.tail.y,
                 )
 
-                if (distance > option.hitRadius) {
+                const hitRadius =
+                    ev.pointerType === 'touch'
+                        ? option.hitRadius * 1.35
+                        : option.hitRadius
+
+                if (distance > hitRadius) {
                     continue
                 }
 
-                const score = distance / option.hitRadius
+                const score = distance / hitRadius
                 const depth = Math.min(segment.head.depth, segment.tail.depth)
 
                 if (
@@ -440,11 +525,16 @@ export class PoseSelectMode extends InputHandler {
         let bestAxis: GizmoAxis | undefined
         let bestDistance = Number.POSITIVE_INFINITY
 
+        const pickDistance =
+            ev.pointerType === 'touch'
+                ? TOUCH_GIZMO_PICK_DISTANCE
+                : GIZMO_PICK_DISTANCE
+
         for (const ring of rings) {
             const distance = pointPolylineDistance(px, py, ring.points)
 
             if (
-                distance <= GIZMO_PICK_DISTANCE &&
+                distance <= pickDistance &&
                 distance < bestDistance
             ) {
                 bestAxis = ring.axis

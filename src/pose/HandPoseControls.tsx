@@ -88,6 +88,7 @@ function HandSlider(props: {
 }) {
     return (
         <div
+            class="hand-slider-row"
             style={{
                 display: 'grid',
                 gridTemplateColumns: '92px 72px 1fr',

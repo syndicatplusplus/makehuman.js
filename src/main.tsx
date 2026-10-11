@@ -46,8 +46,8 @@ import { TableAdapter } from 'toad.js/table/adapter/TableAdapter'
 import { PoseTab } from 'pose/PoseTab'
 import { ViewportControls } from 'ui/ViewportControls'
 import { MannequinControls } from 'ui/MannequinControls'
+import { installMobileUI } from 'ui/MobileUI'
 
-const CONTROL_PANEL_WIDTH = 540
 const DEFAULT_MANNEQUIN_PROXY = 'female_generic'
 
 export async function main() {
@@ -65,6 +65,8 @@ export async function main() {
 }
 
 async function run() {
+    installMobileUI()
+
     const app = new Application()
 
     TreeAdapter.register(SliderTreeAdapter, TreeNodeModel, SliderNode)
@@ -86,10 +88,7 @@ async function run() {
             app={app}
             style={{
                 position: 'absolute',
-                left: `${CONTROL_PANEL_WIDTH}px`,
-                right: 0,
-                top: 0,
-                bottom: 0,
+                inset: 0,
                 overflow: 'hidden',
             }}
         />
@@ -98,21 +97,25 @@ async function run() {
     document.body.replaceChildren(
         ...(
             <>
-                <Tabs
-                    model={app.tabModel}
-                    style={{
-                        position: 'absolute',
-                        left: 0,
-                        width: `${CONTROL_PANEL_WIDTH}px`,
-                        top: 0,
-                        bottom: 0,
-                    }}
-                >
-                    <MorphTab app={app} />
-                    <PoseTab app={app} />
-                </Tabs>
-                {glview}
-                <ViewportControls app={app} />
+                <div id="app-control-panel">
+                    <Tabs
+                        model={app.tabModel}
+                        style={{
+                            position: 'absolute',
+                            inset: 0,
+                            width: '100%',
+                            height: '100%',
+                        }}
+                    >
+                        <MorphTab app={app} />
+                        <PoseTab app={app} />
+                    </Tabs>
+                </div>
+
+                <div id="app-viewport">
+                    {glview}
+                    <ViewportControls app={app} />
+                </div>
             </> as Fragment
         )
     )

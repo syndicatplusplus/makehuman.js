@@ -36,6 +36,7 @@ function PoseAxis(props: { label: string, model: NumberModel }) {
     return (
         <div style={{ marginBottom: '18px' }}>
             <div
+                class="pose-axis-row"
                 style={{
                     display: 'grid',
                     gridTemplateColumns: '28px 72px 1fr',
@@ -159,11 +160,12 @@ export function PoseTab(props: { app: Application }) {
             visibilityChange={poseVisibility}
         >
             <div
+                class="pose-scroll-panel"
                 style={{
-                    padding: '18px',
                     height: '100%',
                     overflow: 'auto',
                     boxSizing: 'border-box',
+                    WebkitOverflowScrolling: 'touch',
                 }}
             >
                 <h2 style={{ marginTop: 0 }}>Pose</h2>
@@ -209,8 +211,8 @@ export function PoseTab(props: { app: Application }) {
                         lineHeight: '1.45',
                     }}
                 >
-                    Left-click selects. Empty-space click or Escape clears. Drag along a
-                    colored local-axis ring to rotate it. Middle-drag still orbits the camera.
+                    Touch: tap selects, one-finger drag orbits, two-finger drag pans,
+                    and pinch zooms. Mouse: middle-drag orbits and Shift+middle-drag pans.
                 </p>
 
                 <HandPoseControls

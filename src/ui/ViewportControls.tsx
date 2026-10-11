@@ -42,8 +42,6 @@ function resetView(app: Application) {
 function centerSelected(app: Application) {
     const target = app.glview.selectionCenter()
 
-    // Keep the current view angle and distance, but move the selected point
-    // onto the center of the screen.
     const current = app.glview.ctx.camera
     const distance = Math.max(2, Math.abs(current[14]))
 
@@ -68,20 +66,18 @@ function centerSelected(app: Application) {
 
 export function ViewportControls(props: { app: Application }) {
     const app = props.app
+    let expanded = false
 
-    return (
+    const panel = (
         <div
             style={{
-                position: 'absolute',
-                right: '14px',
-                top: '14px',
-                zIndex: 20,
-                padding: '8px',
-                borderRadius: '8px',
-                background: 'rgba(32, 32, 32, 0.78)',
-                backdropFilter: 'blur(4px)',
-                display: 'grid',
-                gap: '6px',
+                display: 'none',
+                marginTop: '8px',
+                padding: '10px',
+                borderRadius: '10px',
+                background: 'rgba(32, 32, 32, 0.88)',
+                backdropFilter: 'blur(5px)',
+                gap: '8px',
                 pointerEvents: 'auto',
                 userSelect: 'none',
             }}
@@ -90,7 +86,7 @@ export function ViewportControls(props: { app: Application }) {
                 style={{
                     display: 'flex',
                     justifyContent: 'center',
-                    gap: '6px',
+                    gap: '8px',
                 }}
             >
                 <Button action={() => pan(app, 0, -1)}>↑</Button>
@@ -99,7 +95,7 @@ export function ViewportControls(props: { app: Application }) {
             <div
                 style={{
                     display: 'flex',
-                    gap: '6px',
+                    gap: '8px',
                 }}
             >
                 <Button action={() => pan(app, -1, 0)}>←</Button>
@@ -110,7 +106,7 @@ export function ViewportControls(props: { app: Application }) {
             <div
                 style={{
                     display: 'flex',
-                    gap: '6px',
+                    gap: '8px',
                 }}
             >
                 <Button action={() => zoom(app, ZOOM_IN_FACTOR)}>＋</Button>
@@ -119,6 +115,34 @@ export function ViewportControls(props: { app: Application }) {
 
             <Button action={() => centerSelected(app)}>Center</Button>
             <Button action={() => resetView(app)}>Reset view</Button>
+        </div>
+    ) as HTMLDivElement
+
+    const toggle = () => {
+        expanded = !expanded
+        panel.style.display = expanded ? 'grid' : 'none'
+    }
+
+    return (
+        <div
+            class="viewport-controls"
+            style={{
+                position: 'absolute',
+                right: '14px',
+                top: '14px',
+                zIndex: 20,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                pointerEvents: 'none',
+                userSelect: 'none',
+            }}
+        >
+            <div style={{ pointerEvents: 'auto' }}>
+                <Button action={toggle}>View</Button>
+            </div>
+
+            {panel}
         </div>
     )
 }

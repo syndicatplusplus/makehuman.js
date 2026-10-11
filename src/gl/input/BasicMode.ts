@@ -12,17 +12,42 @@ interface Point {
 }
 
 type DragMode = 'orbit' | 'pan'
+type TouchMode = 'orbit' | 'panzoom'
 
 const MIN_ZOOM_DISTANCE = 1.5
 const MAX_ZOOM_DISTANCE = 80
 const WHEEL_ZOOM_SPEED = 0.0015
+const TOUCH_ORBIT_THRESHOLD = 8
+const TOUCH_ORBIT_DEGREES_PER_PIXEL = 0.35
+
+function distance(a: Point, b: Point): number {
+    return Math.hypot(b.x - a.x, b.y - a.y)
+}
+
+function midpoint(a: Point, b: Point): Point {
+    return {
+        x: (a.x + b.x) / 2,
+        y: (a.y + b.y) / 2,
+    }
+}
 
 export class BasicMode extends InputHandler {
     private _view: GLView
+
+    // Mouse navigation.
     private _down: Point | undefined
     private _camera: mat4 | undefined
     private _center: vec3 | undefined
     private _dragMode: DragMode = 'orbit'
+
+    // Touch navigation.
+    private _touches = new Map<number, Point>()
+    private _touchMode: TouchMode | undefined
+    private _touchCamera: mat4 | undefined
+    private _touchCenter: vec3 | undefined
+    private _touchStartPoint: Point | undefined
+    private _touchStartMidpoint: Point | undefined
+    private _touchStartDistance = 0
 
     private _wheel = (ev: WheelEvent) => {
         ev.preventDefault()
@@ -30,16 +55,14 @@ export class BasicMode extends InputHandler {
         const camera = this._view.ctx.camera
         const currentZ = camera[14]
 
-        // Mouse-wheel zoom is exponential so it remains useful both in the
-        // full-body view and when zoomed tightly onto a hand.
         const factor = Math.exp(ev.deltaY * WHEEL_ZOOM_SPEED)
         const sign = currentZ <= 0 ? -1 : 1
-        const distance = Math.max(
+        const zoomDistance = Math.max(
             MIN_ZOOM_DISTANCE,
             Math.min(MAX_ZOOM_DISTANCE, Math.abs(currentZ) * factor),
         )
 
-        camera[14] = sign * distance
+        camera[14] = sign * zoomDistance
         this._view.invalidate()
     }
 
@@ -47,11 +70,13 @@ export class BasicMode extends InputHandler {
         super()
         this._view = view
 
-        // Direct wheel handling keeps this change local to BasicMode rather
-        // than requiring a new wheel event throughout the whole input stack.
         this._view.canvas.addEventListener('wheel', this._wheel, {
             passive: false,
         })
+
+        // Safari/iPad should leave canvas gestures to us rather than turning
+        // them into page scrolling or browser zoom.
+        this._view.canvas.style.touchAction = 'none'
     }
 
     override destructor(): void {
@@ -59,7 +84,7 @@ export class BasicMode extends InputHandler {
     }
 
     override info() {
-        return "Viewport: middle-drag orbit, Shift+middle-drag pan, wheel zoom"
+        return 'Viewport: drag orbit; two-finger drag pan; pinch zoom'
     }
 
     override keydown(ev: KeyboardEvent): void {
@@ -131,7 +156,87 @@ export class BasicMode extends InputHandler {
         }
     }
 
+    private applyOrbit(
+        startCamera: mat4,
+        center: vec3,
+        xDegrees: number,
+        yDegrees: number,
+    ) {
+        const cameraRotation = mat4.clone(startCamera)
+        cameraRotation[12] = cameraRotation[13] = cameraRotation[14] = 0
+
+        const invCameraRotation = mat4.invert(
+            mat4.create(),
+            cameraRotation,
+        )!
+
+        const moveToRotationCenter = mat4.create()
+        mat4.translate(
+            moveToRotationCenter,
+            moveToRotationCenter,
+            center,
+        )
+
+        const backFromRotationCenter = mat4.invert(
+            mat4.create(),
+            moveToRotationCenter,
+        )!
+
+        const m = mat4.create()
+        mat4.mul(m, m, moveToRotationCenter)
+        mat4.mul(m, m, invCameraRotation)
+        mat4.rotateX(m, m, deg2rad(yDegrees))
+        mat4.mul(m, m, cameraRotation)
+        mat4.rotateY(m, m, deg2rad(xDegrees))
+        mat4.mul(m, m, backFromRotationCenter)
+
+        mat4.mul(this._view.ctx.camera, startCamera, m)
+        this._view.invalidate()
+    }
+
+    private beginSingleTouch(point: Point) {
+        this._touchMode = 'orbit'
+        this._touchStartPoint = { ...point }
+        this._touchCamera = mat4.clone(this._view.ctx.camera)
+        this._touchCenter = this._view.selectionCenter()
+        this._touchStartMidpoint = undefined
+        this._touchStartDistance = 0
+    }
+
+    private beginTwoFingerTouch() {
+        const points = Array.from(this._touches.values())
+        if (points.length < 2) {
+            return
+        }
+
+        const a = points[0]!
+        const b = points[1]!
+
+        this._touchMode = 'panzoom'
+        this._touchCamera = mat4.clone(this._view.ctx.camera)
+        this._touchStartMidpoint = midpoint(a, b)
+        this._touchStartDistance = Math.max(1, distance(a, b))
+        this._touchStartPoint = undefined
+        this._touchCenter = undefined
+    }
+
     override pointerdown(ev: PointerEvent): void {
+        if (ev.pointerType === 'touch') {
+            const point = { x: ev.clientX, y: ev.clientY }
+
+            this._view.canvas.setPointerCapture(ev.pointerId)
+            this._touches.set(ev.pointerId, point)
+
+            if (this._touches.size >= 2) {
+                this.beginTwoFingerTouch()
+            } else {
+                this.beginSingleTouch(point)
+            }
+
+            ev.preventDefault()
+            return
+        }
+
         if (ev.button !== MouseButton.MIDDLE) {
             return
         }
@@ -145,23 +250,109 @@ export class BasicMode extends InputHandler {
     }
 
     override pointermove(ev: PointerEvent): void {
+        if (
+            ev.pointerType === 'touch' &&
+            this._touches.has(ev.pointerId)
+        ) {
+            this._touches.set(ev.pointerId, {
+                x: ev.clientX,
+                y: ev.clientY,
+            })
+
+            if (
+                this._touches.size >= 2 &&
+                this._touchCamera !== undefined &&
+                this._touchStartMidpoint !== undefined
+            ) {
+                const points = Array.from(this._touches.values())
+                const a = points[0]!
+                const b = points[1]!
+                const currentMidpoint = midpoint(a, b)
+                const currentDistance = Math.max(1, distance(a, b))
+
+                const dx =
+                    currentMidpoint.x - this._touchStartMidpoint.x
+                const dy =
+                    currentMidpoint.y - this._touchStartMidpoint.y
+
+                const startCamera = this._touchCamera
+                const viewDistance = Math.max(
+                    MIN_ZOOM_DISTANCE,
+                    Math.abs(startCamera[14]),
+                )
+                const height = Math.max(
+                    300,
+                    this._view.canvas.clientHeight,
+                )
+                const panScale = (viewDistance / height) * 1.35
+
+                mat4.copy(this._view.ctx.camera, startCamera)
+                this._view.ctx.camera[12] =
+                    startCamera[12] + dx * panScale
+                this._view.ctx.camera[13] =
+                    startCamera[13] - dy * panScale
+
+                const factor =
+                    this._touchStartDistance / currentDistance
+                const sign = startCamera[14] <= 0 ? -1 : 1
+                const zoomDistance = Math.max(
+                    MIN_ZOOM_DISTANCE,
+                    Math.min(
+                        MAX_ZOOM_DISTANCE,
+                        Math.abs(startCamera[14]) * factor,
+                    ),
+                )
+
+                this._view.ctx.camera[14] = sign * zoomDistance
+                this._view.invalidate()
+
+                ev.preventDefault()
+                return
+            }
+
+            if (
+                this._touches.size === 1 &&
+                this._touchMode === 'orbit' &&
+                this._touchCamera !== undefined &&
+                this._touchCenter !== undefined &&
+                this._touchStartPoint !== undefined
+            ) {
+                const point = this._touches.values().next().value as Point
+                const dx = point.x - this._touchStartPoint.x
+                const dy = point.y - this._touchStartPoint.y
+
+                if (Math.hypot(dx, dy) >= TOUCH_ORBIT_THRESHOLD) {
+                    this.applyOrbit(
+                        this._touchCamera,
+                        this._touchCenter,
+                        dx * TOUCH_ORBIT_DEGREES_PER_PIXEL,
+                        dy * TOUCH_ORBIT_DEGREES_PER_PIXEL,
+                    )
+                }
+
+                ev.preventDefault()
+                return
+            }
+
+            return
+        }
+
         if (this._down === undefined || this._camera === undefined) {
             return
         }
+
         ev.preventDefault()
 
         const x = ev.x - this._down.x
         const y = ev.y - this._down.y
 
         if (this._dragMode === 'pan') {
-            // Pan directly in camera/screen X/Y. Scale it with viewing
-            // distance so panning feels similar at body and hand zoom levels.
-            const distance = Math.max(
+            const viewDistance = Math.max(
                 MIN_ZOOM_DISTANCE,
                 Math.abs(this._camera[14]),
             )
             const height = Math.max(300, this._view.canvas.clientHeight)
-            const scale = (distance / height) * 1.35
+            const scale = (viewDistance / height) * 1.35
 
             mat4.copy(this._view.ctx.camera, this._camera)
             this._view.ctx.camera[12] = this._camera[12] + x * scale
@@ -171,38 +362,44 @@ export class BasicMode extends InputHandler {
             return
         }
 
-        const cameraRotation = mat4.clone(this._camera)
-        cameraRotation[12] = cameraRotation[13] = cameraRotation[14] = 0
-        const invCameraRotation = mat4.invert(
-            mat4.create(),
-            cameraRotation,
-        )!
-
-        const moveToRotationCenter = mat4.create()
-        mat4.translate(
-            moveToRotationCenter,
-            moveToRotationCenter,
+        this.applyOrbit(
+            this._camera,
             this._center!,
+            x,
+            y,
         )
-
-        const backFromRotationCenter = mat4.invert(
-            mat4.create(),
-            moveToRotationCenter,
-        )!
-
-        const m = mat4.create()
-        mat4.mul(m, m, moveToRotationCenter)
-        mat4.mul(m, m, invCameraRotation)
-        mat4.rotateX(m, m, deg2rad(y))
-        mat4.mul(m, m, cameraRotation)
-        mat4.rotateY(m, m, deg2rad(x))
-        mat4.mul(m, m, backFromRotationCenter)
-
-        mat4.mul(this._view.ctx.camera, this._camera, m)
-        this._view.invalidate()
     }
 
     override pointerup(ev: PointerEvent): void {
+        if (
+            ev.pointerType === 'touch' &&
+            this._touches.has(ev.pointerId)
+        ) {
+            this._touches.delete(ev.pointerId)
+
+            if (this._view.canvas.hasPointerCapture(ev.pointerId)) {
+                this._view.canvas.releasePointerCapture(ev.pointerId)
+            }
+
+            if (this._touches.size >= 2) {
+                this.beginTwoFingerTouch()
+            } else if (this._touches.size === 1) {
+                const remaining =
+                    this._touches.values().next().value as Point
+                this.beginSingleTouch(remaining)
+            } else {
+                this._touchMode = undefined
+                this._touchCamera = undefined
+                this._touchCenter = undefined
+                this._touchStartPoint = undefined
+                this._touchStartMidpoint = undefined
+                this._touchStartDistance = 0
+            }
+
+            ev.preventDefault()
+            return
+        }
+
         if (this._down === undefined) {
             return
         }

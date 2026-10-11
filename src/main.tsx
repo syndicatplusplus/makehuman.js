@@ -27,8 +27,6 @@ TODO: IT'S TIME TO CLEAR UP THIS MESS
 
 import { SliderNode } from './modifier/loadSliders'
 import { ProxyType } from 'proxy/Proxy'
-
-import FileTab from 'FileTab'
 import { SliderTreeAdapter } from 'ui/morphView'
 import { TAB } from 'HistoryManager'
 
@@ -39,21 +37,15 @@ import { Table } from 'toad.js/table/Table'
 import { TreeNodeModel } from 'toad.js/table/model/TreeNodeModel'
 import { TreeAdapter } from 'toad.js/table/adapter/TreeAdapter'
 import { Tab, Tabs } from 'toad.js/viewkit/Tab'
-import { Form, FormLabel, FormField, FormHelp } from 'toad.js/viewkit/Form'
 import { StringArrayAdapter } from 'toad.js/table/adapter/StringArrayAdapter'
 import { StringArrayModel } from 'toad.js/table/model/StringArrayModel'
 import { Application, setRenderer } from 'Application'
 import { RenderHuman } from 'render/RenderHuman'
-// import { BlendShapeTab } from 'blendshapes/BlendShapeTab'
-import { ConnectButton } from 'net/ConnectButton'
-import { DevicesTab } from 'mediapipe/pose/DevicesTab'
-import { MorphTool } from 'morphtool/MorphTool'
 import { RenderView } from 'render/RenderView'
-import { FormSwitch } from 'toad.js/viewkit/FormSwitch'
-import { BlazeTab } from 'mediapipe/BlazeTab'
 import { TableAdapter } from 'toad.js/table/adapter/TableAdapter'
-import { Display } from 'toad.js/viewkit/Display'
-import { Select } from 'toad.js/viewkit/Select'
+
+const CONTROL_PANEL_WIDTH = 540
+const DEFAULT_MANNEQUIN_PROXY = 'female_generic'
 
 export async function main() {
     try {
@@ -72,35 +64,29 @@ export async function main() {
 async function run() {
     const app = new Application()
 
-    // const mhm = localStorage.getItem("MakeHumanMorph")
-    // if (mhm != null) {
-    //     app.humanMesh.human.fromMHM(mhm)
-    // }
-    // const mhp = localStorage.getItem("MakeHumanPose")
-    // if (mhp != null) {
-    //     app.skeleton.fromMHP(mhp)
-    // }
-    // document.onvisibilitychange = (e) => {
-    //     localStorage.setItem("MakeHumanMorph", app.humanMesh.human.toMHM())
-    //     localStorage.setItem("MakeHumanPose", app.skeleton.toMHP())
-    // }
-
     TreeAdapter.register(SliderTreeAdapter, TreeNodeModel, SliderNode)
-
     TableAdapter.register(StringArrayAdapter, StringArrayModel)
 
-    const oiah = 'calc((12/16) * 1rem + 8px'
+    // Start directly in the body editor instead of the old Proxy tab.
+    app.tabModel.value = TAB.MORPH
 
-    // App.glview needs to be set before other operations
+    // Use MakeHuman's very lightweight proxy mesh as the visible mannequin.
+    // The hidden MakeHuman base mesh still drives morphs and skeleton deformation.
+    const mannequinProxy = app.proxyManager.list.get(ProxyType.Proxymeshes)
+    if (mannequinProxy !== undefined) {
+        mannequinProxy.value = DEFAULT_MANNEQUIN_PROXY
+    }
+
+    // App.glview needs to be set before other operations.
     const glview = (
         <RenderView
             app={app}
             style={{
                 position: 'absolute',
-                left: '500px',
+                left: `${CONTROL_PANEL_WIDTH}px`,
                 right: 0,
                 top: 0,
-                bottom: 'calc((12/16) * 1rem + 4px',
+                bottom: 0,
                 overflow: 'hidden',
             }}
         />
@@ -114,42 +100,14 @@ async function run() {
                     style={{
                         position: 'absolute',
                         left: 0,
-                        width: '500px',
+                        width: `${CONTROL_PANEL_WIDTH}px`,
                         top: 0,
-                        bottom: oiah,
+                        bottom: 0,
                     }}
                 >
-                    <FileTab app={app} />
                     <MorphTab app={app} />
-                    <ProxyTab app={app} />
-                    {/* <PoseTab app={app} /> */}
-                    {/* <BlendShapeTab app={app} /> */}
-                    {/* <MorphTool app={app} /> */}
-                    <BlazeTab app={app} />
-                    <DevicesTab app={app} />
-                    {/* <ExpressionTab app={app} /> */}
-                    {/* <ChordataTab app={app} /> */}
                 </Tabs>
                 {glview}
-                <div
-                    style={{
-                        background: 'var(--tx-gray-50)',
-                        padding: '2px',
-                        paddingLeft: '8px',
-                        margin: 0,
-                        border: 'none',
-                        position: 'absolute',
-                        left: 0,
-                        right: 0,
-                        height: 'calc((12/16) * 1rem + 4px',
-                        bottom: 0,
-                        overflow: 'hidden',
-                    }}
-                >
-                    <ConnectButton connector={app.connector} />
-                    &nbsp;
-                    <Display model={app.status} />
-                </div>
             </> as Fragment
         )
     )
@@ -158,7 +116,7 @@ async function run() {
 function MorphTab(props: { app: Application }) {
     return (
         <Tab
-            label="Morph"
+            label="Body"
             value={TAB.MORPH}
             visibilityChange={setRenderer(props.app, new RenderHuman())}
         >
@@ -166,30 +124,6 @@ function MorphTab(props: { app: Application }) {
                 model={props.app.morphControls}
                 style={{ width: '100%', height: '100%' }}
             />
-        </Tab>
-    )
-}
-
-function ProxyTab(props: { app: Application }) {
-    return (
-        <Tab
-            label="Proxy"
-            value={TAB.PROXY}
-            visibilityChange={setRenderer(props.app, new RenderHuman())}
-        >
-            <Form variant="narrow">
-                {props.app.proxyManager.allProxyTypes.map((pid) => (
-                    <>
-                        <FormLabel>{ProxyType[pid]}</FormLabel>
-                        <FormField>
-                            <Select id={ProxyType[pid]} model={props.app.proxyManager.list.get(pid)} />
-                        </FormField>
-                        <FormHelp model={props.app.proxyManager.list.get(pid) as any} />
-                    </>
-                ))}
-                <FormSwitch model={props.app.wireframe} />
-            </Form>
-            <div id="debug">DEBUG</div>
         </Tab>
     )
 }

@@ -7,6 +7,8 @@ import { RenderView } from "./RenderView"
 import { di } from "lib/di"
 import { Texture } from "gl/Texture"
 
+const MANNEQUIN_COLOR = [0.88, 0.64, 0.62]
+
 export class RenderHuman extends RenderHandler {
     private viewHead: boolean
     constructor(viewHead: boolean = false) {
@@ -45,15 +47,11 @@ export class RenderHuman extends RenderHandler {
             humanMesh.changedProxy = undefined
         }
 
-        const gl = view.gl
-        const shaderShadedMono = view.shaderShadedMono
-        const shaderShadedTexture = view.shaderShadedTexture
-
         view.prepareCanvas()
         const { projectionMatrix, modelViewMatrix, normalMatrix } = view.prepare()
 
-        shaderShadedMono.init(gl, projectionMatrix, modelViewMatrix, normalMatrix)
-        shaderShadedTexture.init(gl, projectionMatrix, modelViewMatrix, normalMatrix)
+        view.shaderShadedMono.init(view.gl, projectionMatrix, modelViewMatrix, normalMatrix)
+        view.shaderShadedTexture.init(view.gl, projectionMatrix, modelViewMatrix, normalMatrix)
 
         app.updateManager.updateIt()
         drawHumanCore(app, view)
@@ -67,29 +65,19 @@ export function drawHumanCore(app: Application, view: RenderView) {
     const wireframe = app.wireframe.value
 
     gl.disable(gl.CULL_FACE)
-    // gl.depthFunc(gl.LESS) // default is LESS
-    // gl.enable(gl.CULL_FACE)
-    // gl.cullFace(gl.BACK)
 
     let alpha: number
     if (wireframe) {
         gl.enable(gl.BLEND)
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
         alpha = 0.3
-        // because of transparency, we also want to draw hidden faces
         gl.depthMask(false)
-        // gl.disable(gl.DEPTH_TEST)
     } else {
         gl.disable(gl.BLEND)
         alpha = 1
         gl.depthMask(true)
-        // gl.enable(gl.DEPTH_TEST)
     }
     shaderShadedTexture.setAlpha(alpha)
-
-    //
-    // draw base mesh
-    //
 
     const WORD_LENGTH = 2
     const renderList = view.renderList
@@ -104,53 +92,58 @@ export function drawHumanCore(app: Application, view: RenderView) {
         proxyTexture?: Texture,
         glMode: number
     }
+
+    // Art-reference mannequin mode:
+    // body, eyes, teeth and tongue all use one untextured material.
+    // The MakeHuman base mesh can still drive morphs and posing underneath.
     const meshDefinitions: MeshDefinition[] = [{
         group: [BaseMeshGroup.SKIN],
         proxyType: ProxyType.Proxymeshes,
-        rgb: [1, 0.8, 0.7], glMode: gl.TRIANGLES,
-        baseTexture: view.bodyTexture,
-        proxyTexture: view.bodyTexture
+        rgb: MANNEQUIN_COLOR,
+        glMode: gl.TRIANGLES
     }, {
         group: [BaseMeshGroup.EYEBALL0, BaseMeshGroup.EYEBALL1],
         proxyType: ProxyType.Eyes,
-        rgb: [0, 0.5, 1], glMode: gl.TRIANGLES,
-        baseTexture: view.bodyTexture,
-        proxyTexture: view.eyeTexture
+        rgb: MANNEQUIN_COLOR,
+        glMode: gl.TRIANGLES
     }, {
         group: [BaseMeshGroup.TEETH_TOP, BaseMeshGroup.TEETH_BOTTOM],
         proxyType: ProxyType.Teeth,
-        rgb: [1, 1, 1], glMode: gl.TRIANGLES,
-        baseTexture: view.bodyTexture,
+        rgb: MANNEQUIN_COLOR,
+        glMode: gl.TRIANGLES
     }, {
         group: [BaseMeshGroup.TOUNGE],
         proxyType: ProxyType.Tongue,
-        rgb: [1, 0, 0], glMode: gl.TRIANGLES,
-        baseTexture: view.bodyTexture,
+        rgb: MANNEQUIN_COLOR,
+        glMode: gl.TRIANGLES
     }, {
         group: [],
         proxyType: ProxyType.Hair,
-        rgb: [0.5, 0, 0], glMode: gl.TRIANGLES,
+        rgb: MANNEQUIN_COLOR,
+        glMode: gl.TRIANGLES
     }, {
         group: [],
         proxyType: ProxyType.Eyebrows,
-        rgb: [0, 0, 0], glMode: gl.TRIANGLES,
+        rgb: MANNEQUIN_COLOR,
+        glMode: gl.TRIANGLES
     }, {
         group: [],
         proxyType: ProxyType.Eyelashes,
-        rgb: [0, 0, 0], glMode: gl.TRIANGLES,
+        rgb: MANNEQUIN_COLOR,
+        glMode: gl.TRIANGLES
     }, {
         group: [],
         proxyType: ProxyType.Clothes,
-        rgb: [1, 1, 1], glMode: gl.TRIANGLES,
+        rgb: MANNEQUIN_COLOR,
+        glMode: gl.TRIANGLES
     }, {
-        group: [BaseMeshGroup.CUBE], rgb: [1, 0, 0.5], glMode: gl.LINE_STRIP
+        group: [BaseMeshGroup.CUBE],
+        rgb: [1, 0, 0.5],
+        glMode: gl.LINE_STRIP
     }]
 
-    // NOTE: base.glIndices has the quads from the wavefront file as triangles,
-    //       hence we do ... / 4 * 6 in the drawElements calls below
-
     //
-    // draw base mesh with base texture
+    // Draw any groups that still use textures.
     //
     shaderShadedTexture.use(gl)
     base.glVertex.bind(shaderShadedTexture)
@@ -173,11 +166,12 @@ export function drawHumanCore(app: Application, view: RenderView) {
     }
 
     //
-    // draw base mesh with single color
+    // Draw the base mesh as a simple shaded mannequin.
     //
     shaderShadedMono.use(gl)
     base.glVertex.bind(shaderShadedMono)
     base.glNormal.bind(shaderShadedMono)
+
     for (let def of meshDefinitions) {
         if (def.proxyType !== undefined && renderList.proxies.has(def.proxyType)) {
             continue
@@ -193,7 +187,7 @@ export function drawHumanCore(app: Application, view: RenderView) {
     }
 
     //
-    // draw proxy meshes
+    // Draw proxy meshes as the same untextured mannequin material.
     //
     for (let def of meshDefinitions) {
         if (def.proxyType === undefined || !renderList.proxies.has(def.proxyType)) {
@@ -213,7 +207,7 @@ export function drawHumanCore(app: Application, view: RenderView) {
     }
 
     //
-    // draw skeleton
+    // Draw skeleton when wireframe mode is enabled.
     //
     if (wireframe) {
         renderList.base.bind(shaderShadedMono)

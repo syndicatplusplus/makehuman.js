@@ -45,6 +45,7 @@ import { RenderView } from 'render/RenderView'
 import { TableAdapter } from 'toad.js/table/adapter/TableAdapter'
 import { PoseTab } from 'pose/PoseTab'
 import { ViewportControls } from 'ui/ViewportControls'
+import { MannequinControls } from 'ui/MannequinControls'
 
 const CONTROL_PANEL_WIDTH = 540
 const DEFAULT_MANNEQUIN_PROXY = 'female_generic'
@@ -124,10 +125,30 @@ function MorphTab(props: { app: Application }) {
             value={TAB.MORPH}
             visibilityChange={setRenderer(props.app, new RenderHuman())}
         >
-            <Table
-                model={props.app.morphControls}
-                style={{ width: '100%', height: '100%' }}
-            />
+            <div
+                style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    width: '100%',
+                    height: '100%',
+                    overflow: 'hidden',
+                }}
+            >
+                <MannequinControls app={props.app} />
+
+                <div
+                    style={{
+                        flex: '1 1 auto',
+                        minHeight: 0,
+                        overflow: 'hidden',
+                    }}
+                >
+                    <Table
+                        model={props.app.morphControls}
+                        style={{ width: '100%', height: '100%' }}
+                    />
+                </div>
+            </div>
         </Tab>
     )
 }

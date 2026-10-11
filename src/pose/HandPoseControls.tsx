@@ -1,6 +1,7 @@
 import { Application } from 'Application'
-import { euler2matrix } from 'gl/algorithms/euler'
+import { euler2matrix, matrix2euler } from 'gl/algorithms/euler'
 import { deg2rad } from 'gl/algorithms/deg2rad'
+import { rad2deg } from 'gl/algorithms/rad2deg'
 import { mat4, vec4 } from 'gl-matrix'
 import { NumberModel } from 'toad.js/appkit/NumberModel'
 import { OptionModel } from 'toad.js/appkit/OptionModel'
@@ -8,6 +9,7 @@ import { Button } from 'toad.js/viewkit/Button'
 import { Select } from 'toad.js/viewkit/Select'
 import { Slider } from 'toad.js/viewkit/Slider'
 import { TextField } from 'toad.js/viewkit/TextField'
+import { POSE_CHANGED_EVENT } from './PoseEvents'
 
 type HandSide = 'L' | 'R'
 type FingerKey = 'thumb' | 'index' | 'middle' | 'ring' | 'pinky'
@@ -63,6 +65,10 @@ function freshState(): HandState {
         pinky: 0,
         spread: 0,
     }
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value))
 }
 
 function refreshPose(app: Application) {
@@ -206,6 +212,78 @@ export function HandPoseControls(props: {
         refreshPose(app)
     }
 
+    const syncSideFromSkeleton = (side: HandSide) => {
+        const hand = state[side]
+        const sideSign = side === 'L' ? 1 : -1
+
+        for (const finger of Object.keys(fingerModels) as FingerKey[]) {
+            const fingerNumber = FINGER_NUMBER[finger]
+            const ratios: number[] = []
+
+            for (let joint = 1; joint <= 3; ++joint) {
+                const boneName = `finger${fingerNumber}-${joint}.${side}`
+                if (!app.skeleton.hasBone(boneName)) {
+                    continue
+                }
+
+                const bone = app.skeleton.getBone(boneName)
+                const rotation = matrix2euler(bone.matUserPoseRelative)
+                const maxDegrees = CURL_MAX[finger][joint - 1]
+
+                if (maxDegrees !== 0) {
+                    ratios.push(rad2deg(rotation.x) / maxDegrees)
+                }
+            }
+
+            const ratio =
+                ratios.length > 0
+                    ? ratios.reduce((sum, value) => sum + value, 0) /
+                        ratios.length
+                    : 0
+
+            hand[finger] = clamp(ratio * 100, 0, 100)
+        }
+
+        const spreadSamples: number[] = []
+
+        for (const finger of Object.keys(SPREAD_WEIGHT) as FingerKey[]) {
+            const weight = SPREAD_WEIGHT[finger] ?? 0
+            if (weight === 0) {
+                continue
+            }
+
+            const boneName = `finger${FINGER_NUMBER[finger]}-1.${side}`
+            if (!app.skeleton.hasBone(boneName)) {
+                continue
+            }
+
+            const rotation = matrix2euler(
+                app.skeleton.getBone(boneName).matUserPoseRelative,
+            )
+
+            spreadSamples.push(
+                rad2deg(rotation.z) / (weight * sideSign),
+            )
+        }
+
+        hand.spread =
+            spreadSamples.length > 0
+                ? clamp(
+                    spreadSamples.reduce((sum, value) => sum + value, 0) /
+                        spreadSamples.length,
+                    -30,
+                    30,
+                )
+                : 0
+
+        hand.all =
+            (hand.thumb +
+                hand.index +
+                hand.middle +
+                hand.ring +
+                hand.pinky) / 5
+    }
+
     const loadSide = (side: HandSide) => {
         const hand = state[side]
 
@@ -294,7 +372,18 @@ export function HandPoseControls(props: {
         app.glview.invalidate()
     }
 
-    loadSide('L')
+    const syncControlsFromSkeleton = () => {
+        syncSideFromSkeleton('L')
+        syncSideFromSkeleton('R')
+        loadSide(sideModel.value)
+    }
+
+    window.addEventListener(
+        POSE_CHANGED_EVENT,
+        syncControlsFromSkeleton,
+    )
+
+    syncControlsFromSkeleton()
 
     return (
         <div

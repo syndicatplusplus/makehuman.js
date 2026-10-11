@@ -15,6 +15,7 @@ import { mat4 } from 'gl-matrix'
 import { POSE_BONES } from './PoseBones'
 import { PoseSelectMode } from './PoseSelectMode'
 import { HandPoseControls } from './HandPoseControls'
+import { PoseFileControls } from './PoseFileControls'
 
 function roundedDegrees(radians: number): number {
     return Math.round(rad2deg(radians) * 10) / 10
@@ -121,12 +122,6 @@ export function PoseTab(props: { app: Application }) {
         refreshPose(app)
     }
 
-    const resetWholePose = () => {
-        app.skeleton.reset()
-        loadSelectedBone()
-        refreshPose(app)
-    }
-
     const rendererVisibility = setRenderer(app, new RenderHuman())
 
     const poseVisibility = (state: 'visible' | 'hidden') => {
@@ -178,6 +173,13 @@ export function PoseTab(props: { app: Application }) {
                     that joint's actual local X, Y and Z orientation in 3D.
                 </p>
 
+                <PoseFileControls
+                    app={app}
+                    afterPoseChanged={() => {
+                        loadSelectedBone()
+                    }}
+                />
+
                 <div style={{ margin: '20px 0 26px 0' }}>
                     <div style={{ marginBottom: '8px' }}>
                         <strong>Body part</strong>
@@ -198,7 +200,6 @@ export function PoseTab(props: { app: Application }) {
                     }}
                 >
                     <Button action={resetSelectedBone}>Reset selected</Button>
-                    <Button action={resetWholePose}>Reset whole pose</Button>
                 </div>
 
                 <p

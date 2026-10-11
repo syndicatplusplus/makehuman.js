@@ -43,6 +43,7 @@ import { Application, setRenderer } from 'Application'
 import { RenderHuman } from 'render/RenderHuman'
 import { RenderView } from 'render/RenderView'
 import { TableAdapter } from 'toad.js/table/adapter/TableAdapter'
+import { PoseTab } from 'pose/PoseTab'
 
 const CONTROL_PANEL_WIDTH = 540
 const DEFAULT_MANNEQUIN_PROXY = 'female_generic'
@@ -67,10 +68,10 @@ async function run() {
     TreeAdapter.register(SliderTreeAdapter, TreeNodeModel, SliderNode)
     TableAdapter.register(StringArrayAdapter, StringArrayModel)
 
-    // Start directly in the body editor instead of the old Proxy tab.
+    // Start directly in the body editor.
     app.tabModel.value = TAB.MORPH
 
-    // Use MakeHuman's very lightweight proxy mesh as the visible mannequin.
+    // Use the smoother generic MakeHuman proxy as the visible mannequin.
     // The hidden MakeHuman base mesh still drives morphs and skeleton deformation.
     const mannequinProxy = app.proxyManager.list.get(ProxyType.Proxymeshes)
     if (mannequinProxy !== undefined) {
@@ -106,6 +107,7 @@ async function run() {
                     }}
                 >
                     <MorphTab app={app} />
+                    <PoseTab app={app} />
                 </Tabs>
                 {glview}
             </> as Fragment

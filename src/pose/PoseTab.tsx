@@ -12,32 +12,8 @@ import { euler2matrix, matrix2euler } from 'gl/algorithms/euler'
 import { deg2rad } from 'gl/algorithms/deg2rad'
 import { rad2deg } from 'gl/algorithms/rad2deg'
 import { mat4 } from 'gl-matrix'
-
-const POSE_BONES: ReadonlyArray<[string, string]> = [
-    ['root', 'Whole body'],
-    ['spine01', 'Hips / lower torso'],
-    ['spine03', 'Chest'],
-    ['neck01', 'Neck'],
-    ['head', 'Head'],
-
-    ['clavicle.L', 'Left shoulder'],
-    ['upperarm01.L', 'Left upper arm'],
-    ['lowerarm01.L', 'Left forearm'],
-    ['wrist.L', 'Left wrist'],
-
-    ['clavicle.R', 'Right shoulder'],
-    ['upperarm01.R', 'Right upper arm'],
-    ['lowerarm01.R', 'Right forearm'],
-    ['wrist.R', 'Right wrist'],
-
-    ['upperleg01.L', 'Left thigh'],
-    ['lowerleg01.L', 'Left shin'],
-    ['foot.L', 'Left foot'],
-
-    ['upperleg01.R', 'Right thigh'],
-    ['lowerleg01.R', 'Right shin'],
-    ['foot.R', 'Right foot'],
-]
+import { POSE_BONES } from './PoseBones'
+import { PoseSelectMode } from './PoseSelectMode'
 
 function roundedDegrees(radians: number): number {
     return Math.round(rad2deg(radians) * 10) / 10
@@ -82,6 +58,7 @@ export function PoseTab(props: { app: Application }) {
     const zModel = new NumberModel(0, { min: -180, max: 180, step: 1 })
 
     let syncingControls = false
+    let poseSelectMode: PoseSelectMode | undefined
 
     const loadSelectedBone = () => {
         const bone = app.skeleton.getBone(boneModel.value)
@@ -92,6 +69,8 @@ export function PoseTab(props: { app: Application }) {
         yModel.value = roundedDegrees(rotation.y)
         zModel.value = roundedDegrees(rotation.z)
         syncingControls = false
+
+        app.glview?.invalidate()
     }
 
     const applySelectedBone = () => {
@@ -125,7 +104,23 @@ export function PoseTab(props: { app: Application }) {
         refreshPose(app)
     }
 
-    // Load the selected bone's current rotation before wiring up change listeners.
+    const rendererVisibility = setRenderer(app, new RenderHuman())
+
+    const poseVisibility = (state: 'visible' | 'hidden') => {
+        rendererVisibility(state)
+
+        if (state === 'visible') {
+            if (poseSelectMode === undefined) {
+                poseSelectMode = new PoseSelectMode(app, boneModel)
+                app.glview.pushInputHandler(poseSelectMode)
+            }
+            app.glview.invalidate()
+        } else if (poseSelectMode !== undefined) {
+            app.glview.popInputHandler()
+            poseSelectMode = undefined
+        }
+    }
+
     loadSelectedBone()
 
     boneModel.signal.add(() => loadSelectedBone())
@@ -137,7 +132,7 @@ export function PoseTab(props: { app: Application }) {
         <Tab
             label="Pose"
             value={TAB.POSE}
-            visibilityChange={setRenderer(app, new RenderHuman())}
+            visibilityChange={poseVisibility}
         >
             <div
                 style={{
@@ -150,8 +145,8 @@ export function PoseTab(props: { app: Application }) {
                 <h2 style={{ marginTop: 0 }}>Pose</h2>
 
                 <p style={{ lineHeight: '1.5' }}>
-                    Select a body part, then rotate it around its local X, Y and Z axes.
-                    This is the first posing pass; direct click-and-drag gizmos can come next.
+                    Click a body part directly on the mannequin, or choose it from the list.
+                    Then use X, Y and Z to rotate the selected joint.
                 </p>
 
                 <div style={{ margin: '20px 0 26px 0' }}>
@@ -184,8 +179,8 @@ export function PoseTab(props: { app: Application }) {
                         lineHeight: '1.45',
                     }}
                 >
-                    Tip: start with an upper arm or thigh. The axes are local to each bone,
-                    so the useful bending axis can differ between body parts.
+                    Left-click selects. Move the pointer over the mannequin to preview
+                    selectable regions. Middle-drag still orbits around the selected body part.
                 </p>
             </div>
         </Tab>

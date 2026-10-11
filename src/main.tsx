@@ -44,6 +44,7 @@ import { RenderHuman } from 'render/RenderHuman'
 import { RenderView } from 'render/RenderView'
 import { TableAdapter } from 'toad.js/table/adapter/TableAdapter'
 import { PoseTab } from 'pose/PoseTab'
+import { ViewportControls } from 'ui/ViewportControls'
 
 const CONTROL_PANEL_WIDTH = 540
 const DEFAULT_MANNEQUIN_PROXY = 'female_generic'
@@ -110,6 +111,7 @@ async function run() {
                     <PoseTab app={app} />
                 </Tabs>
                 {glview}
+                <ViewportControls app={app} />
             </> as Fragment
         )
     )

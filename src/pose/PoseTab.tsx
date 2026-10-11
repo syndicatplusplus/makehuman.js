@@ -14,6 +14,7 @@ import { rad2deg } from 'gl/algorithms/rad2deg'
 import { mat4 } from 'gl-matrix'
 import { POSE_BONES } from './PoseBones'
 import { PoseSelectMode } from './PoseSelectMode'
+import { HandPoseControls } from './HandPoseControls'
 
 function roundedDegrees(radians: number): number {
     return Math.round(rad2deg(radians) * 10) / 10
@@ -173,8 +174,8 @@ export function PoseTab(props: { app: Application }) {
                 <h2 style={{ marginTop: 0 }}>Pose</h2>
 
                 <p style={{ lineHeight: '1.5' }}>
-                    Click a body part to select it. Click empty space to clear the selection
-                    and hide the gizmo. You can also choose None from the list.
+                    Click a body part to select it. The floating rotation rings now follow
+                    that joint's actual local X, Y and Z orientation in 3D.
                 </p>
 
                 <div style={{ margin: '20px 0 26px 0' }}>
@@ -207,9 +208,16 @@ export function PoseTab(props: { app: Application }) {
                         lineHeight: '1.45',
                     }}
                 >
-                    Left-click selects. Empty-space click or Escape clears. Drag a colored
-                    ring to rotate that local axis. Middle-drag still orbits the camera.
+                    Left-click selects. Empty-space click or Escape clears. Drag along a
+                    colored local-axis ring to rotate it. Middle-drag still orbits the camera.
                 </p>
+
+                <HandPoseControls
+                    app={app}
+                    selectBone={(boneName) => {
+                        boneModel.value = boneName
+                    }}
+                />
             </div>
         </Tab>
     )

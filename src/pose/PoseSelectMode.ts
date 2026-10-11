@@ -23,16 +23,29 @@ type GizmoAxis = 'x' | 'y' | 'z'
 
 interface GizmoDrag {
     axis: GizmoAxis
-    lastAngle: number
+    lastX: number
+    lastY: number
+}
+
+interface GizmoPlacement {
+    joint: ScreenPoint
+    center: ScreenPoint
+}
+
+interface GizmoRing {
+    axis: GizmoAxis
+    points: ScreenPoint[]
+    label: ScreenPoint
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
-const GIZMO_RADII: Record<GizmoAxis, number> = {
-    x: 38,
-    y: 50,
-    z: 62,
-}
+const GIZMO_RADIUS = 58
+const GIZMO_OFFSET = 118
+const GIZMO_EDGE_MARGIN = 82
+const GIZMO_PICK_DISTANCE = 8
+const GIZMO_SEGMENTS = 64
+const GIZMO_DEGREES_PER_PIXEL = 0.75
 
 const GIZMO_COLORS: Record<GizmoAxis, string> = {
     x: '#ff5f56',
@@ -66,14 +79,54 @@ function pointSegmentDistance(
     return Math.hypot(px - x, py - y)
 }
 
-function angleAround(cx: number, cy: number, x: number, y: number): number {
-    return Math.atan2(y - cy, x - cx) * 180 / Math.PI
+function pointPolylineDistance(
+    px: number,
+    py: number,
+    points: ScreenPoint[],
+): number {
+    let best = Number.POSITIVE_INFINITY
+
+    for (let i = 0; i < points.length - 1; ++i) {
+        const a = points[i]!
+        const b = points[i + 1]!
+        best = Math.min(
+            best,
+            pointSegmentDistance(px, py, a.x, a.y, b.x, b.y),
+        )
+    }
+
+    return best
 }
 
-function normalizeAngleDelta(delta: number): number {
-    while (delta > 180) delta -= 360
-    while (delta < -180) delta += 360
-    return delta
+function nearestPolylineTangent(
+    px: number,
+    py: number,
+    points: ScreenPoint[],
+): { x: number, y: number } | undefined {
+    let bestDistance = Number.POSITIVE_INFINITY
+    let bestTangent: { x: number, y: number } | undefined
+
+    for (let i = 0; i < points.length - 1; ++i) {
+        const a = points[i]!
+        const b = points[i + 1]!
+        const distance = pointSegmentDistance(px, py, a.x, a.y, b.x, b.y)
+
+        if (distance < bestDistance) {
+            const dx = b.x - a.x
+            const dy = b.y - a.y
+            const length = Math.hypot(dx, dy)
+
+            if (length > 0.0001) {
+                bestDistance = distance
+                bestTangent = {
+                    x: dx / length,
+                    y: dy / length,
+                }
+            }
+        }
+    }
+
+    return bestTangent
 }
 
 export class PoseSelectMode extends InputHandler {
@@ -192,16 +245,14 @@ export class PoseSelectMode extends InputHandler {
         // The gizmo gets first chance at the click.
         const axis = this.pickGizmo(ev)
         if (axis !== undefined) {
-            const center = this.projectSelectedJoint()
-            if (center !== undefined) {
+            const placement = this.getGizmoPlacement()
+            if (placement !== undefined) {
+                const center = placement.center
+                const rect = this.app.glview.canvas.getBoundingClientRect()
                 this.gizmoDrag = {
                     axis,
-                    lastAngle: angleAround(
-                        center.x,
-                        center.y,
-                        ev.clientX - this.app.glview.canvas.getBoundingClientRect().left,
-                        ev.clientY - this.app.glview.canvas.getBoundingClientRect().top,
-                    ),
+                    lastX: ev.clientX - rect.left,
+                    lastY: ev.clientY - rect.top,
                 }
 
                 this.hoverAxis = axis
@@ -231,22 +282,37 @@ export class PoseSelectMode extends InputHandler {
 
     override pointermove(ev: PointerEvent): void {
         if (this.gizmoDrag !== undefined) {
-            const center = this.projectSelectedJoint()
-            if (center === undefined) {
-                return
-            }
-
             const rect = this.app.glview.canvas.getBoundingClientRect()
             const x = ev.clientX - rect.left
             const y = ev.clientY - rect.top
-            const angle = angleAround(center.x, center.y, x, y)
-            const delta = normalizeAngleDelta(angle - this.gizmoDrag.lastAngle)
 
-            if (Math.abs(delta) > 0.01) {
-                const model = this.axisModels[this.gizmoDrag.axis]
-                model.value = model.value + delta
-                this.gizmoDrag.lastAngle = angle
+            const rings = this.getGizmoRings()
+            const ring = rings.find((candidate) =>
+                candidate.axis === this.gizmoDrag!.axis
+            )
+
+            if (ring !== undefined) {
+                const tangent = nearestPolylineTangent(
+                    this.gizmoDrag.lastX,
+                    this.gizmoDrag.lastY,
+                    ring.points,
+                )
+
+                if (tangent !== undefined) {
+                    const dx = x - this.gizmoDrag.lastX
+                    const dy = y - this.gizmoDrag.lastY
+                    const pixelsAlongRing = dx * tangent.x + dy * tangent.y
+                    const delta = pixelsAlongRing * GIZMO_DEGREES_PER_PIXEL
+
+                    if (Math.abs(delta) > 0.01) {
+                        const model = this.axisModels[this.gizmoDrag.axis]
+                        model.value = model.value + delta
+                    }
+                }
             }
+
+            this.gizmoDrag.lastX = x
+            this.gizmoDrag.lastY = y
 
             this.app.glview.canvas.style.cursor = 'grabbing'
             ev.preventDefault()
@@ -362,24 +428,27 @@ export class PoseSelectMode extends InputHandler {
             return undefined
         }
 
-        const center = this.projectSelectedJoint()
-        if (center === undefined) {
+        const rings = this.getGizmoRings()
+        if (rings.length === 0) {
             return undefined
         }
 
         const rect = this.app.glview.canvas.getBoundingClientRect()
         const px = ev.clientX - rect.left
         const py = ev.clientY - rect.top
-        const distance = Math.hypot(px - center.x, py - center.y)
 
         let bestAxis: GizmoAxis | undefined
         let bestDistance = Number.POSITIVE_INFINITY
 
-        for (const axis of ['x', 'y', 'z'] as const) {
-            const ringDistance = Math.abs(distance - GIZMO_RADII[axis])
-            if (ringDistance <= 8 && ringDistance < bestDistance) {
-                bestAxis = axis
-                bestDistance = ringDistance
+        for (const ring of rings) {
+            const distance = pointPolylineDistance(px, py, ring.points)
+
+            if (
+                distance <= GIZMO_PICK_DISTANCE &&
+                distance < bestDistance
+            ) {
+                bestAxis = ring.axis
+                bestDistance = distance
             }
         }
 
@@ -428,43 +497,82 @@ export class PoseSelectMode extends InputHandler {
             return
         }
 
-        const center = this.projectSelectedJoint()
-        if (center === undefined) {
+        const placement = this.getGizmoPlacement()
+        if (placement === undefined) {
             return
         }
 
-        // A small pivot marker makes it clear which exact joint is rotating.
-        const pivot = document.createElementNS(SVG_NS, 'circle')
-        pivot.setAttribute('cx', `${center.x}`)
-        pivot.setAttribute('cy', `${center.y}`)
-        pivot.setAttribute('r', '4')
-        pivot.setAttribute('fill', '#ffd166')
-        pivot.setAttribute('stroke', '#202020')
-        pivot.setAttribute('stroke-width', '2')
-        this.gizmoGroup.appendChild(pivot)
+        const rings = this.getGizmoRings()
+        if (rings.length === 0) {
+            return
+        }
 
-        for (const axis of ['x', 'y', 'z'] as const) {
-            const active = this.gizmoDrag?.axis === axis
-            const hovered = this.hoverAxis === axis
+        const joint = placement.joint
+        const center = placement.center
 
-            const ring = document.createElementNS(SVG_NS, 'circle')
-            ring.setAttribute('cx', `${center.x}`)
-            ring.setAttribute('cy', `${center.y}`)
-            ring.setAttribute('r', `${GIZMO_RADII[axis]}`)
-            ring.setAttribute(
-                'stroke',
-                active ? '#ffd166' : hovered ? '#ffffff' : GIZMO_COLORS[axis],
+        const connector = document.createElementNS(SVG_NS, 'line')
+        connector.setAttribute('x1', `${joint.x}`)
+        connector.setAttribute('y1', `${joint.y}`)
+        connector.setAttribute('x2', `${center.x}`)
+        connector.setAttribute('y2', `${center.y}`)
+        connector.setAttribute('stroke', '#ffd166')
+        connector.setAttribute('stroke-width', '1.5')
+        connector.setAttribute('stroke-dasharray', '5 5')
+        connector.setAttribute('opacity', '0.42')
+        this.gizmoGroup.appendChild(connector)
+
+        const jointMarker = document.createElementNS(SVG_NS, 'circle')
+        jointMarker.setAttribute('cx', `${joint.x}`)
+        jointMarker.setAttribute('cy', `${joint.y}`)
+        jointMarker.setAttribute('r', '4')
+        jointMarker.setAttribute('fill', '#ffd166')
+        jointMarker.setAttribute('stroke', '#202020')
+        jointMarker.setAttribute('stroke-width', '1.5')
+        this.gizmoGroup.appendChild(jointMarker)
+
+        const gizmoCenter = document.createElementNS(SVG_NS, 'circle')
+        gizmoCenter.setAttribute('cx', `${center.x}`)
+        gizmoCenter.setAttribute('cy', `${center.y}`)
+        gizmoCenter.setAttribute('r', '3')
+        gizmoCenter.setAttribute('fill', '#202020')
+        gizmoCenter.setAttribute('stroke', '#ffd166')
+        gizmoCenter.setAttribute('stroke-width', '1.5')
+        gizmoCenter.setAttribute('opacity', '0.9')
+        this.gizmoGroup.appendChild(gizmoCenter)
+
+        for (const ring of rings) {
+            const active = this.gizmoDrag?.axis === ring.axis
+            const hovered = this.hoverAxis === ring.axis
+
+            const polyline = document.createElementNS(SVG_NS, 'polyline')
+            polyline.setAttribute(
+                'points',
+                ring.points.map((point) => `${point.x},${point.y}`).join(' '),
             )
-            ring.setAttribute('stroke-width', active ? '5' : hovered ? '4' : '2')
-            ring.setAttribute('fill', 'none')
-            ring.setAttribute('opacity', active || hovered ? '0.95' : '0.52')
-            this.gizmoGroup.appendChild(ring)
+            polyline.setAttribute(
+                'stroke',
+                active ? '#ffd166' :
+                hovered ? '#ffffff' :
+                GIZMO_COLORS[ring.axis],
+            )
+            polyline.setAttribute(
+                'stroke-width',
+                active ? '5' : hovered ? '4' : '2.5',
+            )
+            polyline.setAttribute('fill', 'none')
+            polyline.setAttribute('stroke-linejoin', 'round')
+            polyline.setAttribute('stroke-linecap', 'round')
+            polyline.setAttribute(
+                'opacity',
+                active || hovered ? '0.98' : '0.68',
+            )
+            this.gizmoGroup.appendChild(polyline)
 
             if (active || hovered) {
                 const label = document.createElementNS(SVG_NS, 'text')
-                label.textContent = axis.toUpperCase()
-                label.setAttribute('x', `${center.x + GIZMO_RADII[axis] + 7}`)
-                label.setAttribute('y', `${center.y + 5}`)
+                label.textContent = ring.axis.toUpperCase()
+                label.setAttribute('x', `${ring.label.x + 7}`)
+                label.setAttribute('y', `${ring.label.y + 5}`)
                 label.setAttribute('fill', active ? '#ffd166' : '#ffffff')
                 label.setAttribute('font-size', '13')
                 label.setAttribute('font-weight', '700')
@@ -474,6 +582,206 @@ export class PoseSelectMode extends InputHandler {
                 label.setAttribute('stroke-width', '3')
                 this.gizmoGroup.appendChild(label)
             }
+        }
+    }
+
+    private getGizmoRings(): GizmoRing[] {
+        if (
+            this.boneModel.value === 'none' ||
+            !this.app.skeleton.hasBone(this.boneModel.value)
+        ) {
+            return []
+        }
+
+        const placement = this.getGizmoPlacement()
+        if (placement === undefined) {
+            return []
+        }
+
+        const bone = this.app.skeleton.getBone(this.boneModel.value)
+        const transform = bone.matPoseGlobal ?? bone.matRestGlobal
+        if (transform === undefined) {
+            return []
+        }
+
+        const jointWorld = vec4.transformMat4(
+            vec4.create(),
+            vec4.fromValues(0, 0, 0, 1),
+            transform,
+        )
+        const jointProjected = this.projectWorldPoint(jointWorld)
+        if (jointProjected === undefined) {
+            return []
+        }
+
+        const projectLocalAxis = (
+            x: number,
+            y: number,
+            z: number,
+        ): { x: number, y: number } | undefined => {
+            const world = vec4.transformMat4(
+                vec4.create(),
+                vec4.fromValues(x, y, z, 1),
+                transform,
+            )
+            const projected = this.projectWorldPoint(world)
+            if (projected === undefined) {
+                return undefined
+            }
+
+            return {
+                x: projected.x - jointProjected.x,
+                y: projected.y - jointProjected.y,
+            }
+        }
+
+        const localX = projectLocalAxis(1, 0, 0)
+        const localY = projectLocalAxis(0, 1, 0)
+        const localZ = projectLocalAxis(0, 0, 1)
+
+        if (
+            localX === undefined ||
+            localY === undefined ||
+            localZ === undefined
+        ) {
+            return []
+        }
+
+        const ringBasis: Record<
+            GizmoAxis,
+            [{ x: number, y: number }, { x: number, y: number }]
+        > = {
+            // Positive right-handed rotation directions:
+            // X: Y -> Z, Y: Z -> X, Z: X -> Y.
+            x: [localY, localZ],
+            y: [localZ, localX],
+            z: [localX, localY],
+        }
+
+        const rings: GizmoRing[] = []
+
+        for (const axis of ['x', 'y', 'z'] as const) {
+            const [u, v] = ringBasis[axis]
+            const uLength = Math.hypot(u.x, u.y)
+            const vLength = Math.hypot(v.x, v.y)
+            const maxLength = Math.max(uLength, vLength)
+
+            if (maxLength < 0.001) {
+                continue
+            }
+
+            const scale = GIZMO_RADIUS / maxLength
+            const points: ScreenPoint[] = []
+
+            for (let i = 0; i <= GIZMO_SEGMENTS; ++i) {
+                const angle = (i / GIZMO_SEGMENTS) * Math.PI * 2
+                const cos = Math.cos(angle)
+                const sin = Math.sin(angle)
+
+                points.push({
+                    x: placement.center.x +
+                        (u.x * cos + v.x * sin) * scale,
+                    y: placement.center.y +
+                        (u.y * cos + v.y * sin) * scale,
+                    depth: placement.center.depth,
+                })
+            }
+
+            let label = points[0]!
+            for (const point of points) {
+                if (point.x > label.x) {
+                    label = point
+                }
+            }
+
+            rings.push({
+                axis,
+                points,
+                label,
+            })
+        }
+
+        return rings
+    }
+
+    private getGizmoPlacement(): GizmoPlacement | undefined {
+        if (this.boneModel.value === 'none') {
+            return undefined
+        }
+
+        const joint = this.projectSelectedJoint()
+        if (joint === undefined) {
+            return undefined
+        }
+
+        const canvas = this.app.glview.canvas
+        const width = canvas.clientWidth
+        const height = canvas.clientHeight
+        if (width <= 0 || height <= 0) {
+            return undefined
+        }
+
+        // Prefer a direction perpendicular to the selected bone. This keeps the
+        // controls beside the anatomy instead of sitting directly on top of it.
+        let perpX = joint.x < width / 2 ? -1 : 1
+        let perpY = 0
+
+        const segment = this.projectBone(this.boneModel.value)
+        if (segment !== undefined) {
+            const dx = segment.tail.x - segment.head.x
+            const dy = segment.tail.y - segment.head.y
+            const length = Math.hypot(dx, dy)
+
+            if (length > 1) {
+                perpX = -dy / length
+                perpY = dx / length
+            }
+        }
+
+        const candidateA = {
+            x: joint.x + perpX * GIZMO_OFFSET,
+            y: joint.y + perpY * GIZMO_OFFSET,
+            depth: joint.depth,
+        }
+        const candidateB = {
+            x: joint.x - perpX * GIZMO_OFFSET,
+            y: joint.y - perpY * GIZMO_OFFSET,
+            depth: joint.depth,
+        }
+
+        const centerX = width / 2
+        const centerY = height / 2
+
+        const score = (candidate: ScreenPoint): number => {
+            const inside =
+                candidate.x >= GIZMO_EDGE_MARGIN &&
+                candidate.x <= width - GIZMO_EDGE_MARGIN &&
+                candidate.y >= GIZMO_EDGE_MARGIN &&
+                candidate.y <= height - GIZMO_EDGE_MARGIN
+
+            // Prefer the side farther from the middle of the viewport, which is
+            // usually also farther from the mannequin's silhouette.
+            return (inside ? 10000 : 0) +
+                Math.hypot(candidate.x - centerX, candidate.y - centerY)
+        }
+
+        const preferred = score(candidateA) >= score(candidateB)
+            ? candidateA
+            : candidateB
+
+        return {
+            joint,
+            center: {
+                x: Math.max(
+                    GIZMO_EDGE_MARGIN,
+                    Math.min(width - GIZMO_EDGE_MARGIN, preferred.x),
+                ),
+                y: Math.max(
+                    GIZMO_EDGE_MARGIN,
+                    Math.min(height - GIZMO_EDGE_MARGIN, preferred.y),
+                ),
+                depth: joint.depth,
+            },
         }
     }
 

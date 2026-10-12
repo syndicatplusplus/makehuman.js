@@ -1,0 +1,189 @@
+NYANPOSER X Bot rig report
+========================================================================
+Blend file: X:\github\makehuman.js\nyanposer-xbot\xbot-working.blend
+
+Armature objects: 1
+Mesh objects: 2
+
+ARMATURE: Armature
+  location: (0.0, 0.0, 0.0)
+  rotation_euler: (1.570796, -0.0, 0.0)
+  scale: (0.01, 0.01, 0.01)
+  bones: 65
+  hierarchy:
+    mixamorig:Hips | parent=<ROOT> | head=(-8e-06, 104.274872, 1.554316) | tail=(-1.3e-05, 114.833221, 1.690704)
+    mixamorig:Spine | parent=mixamorig:Hips | head=(-1.3e-05, 114.456459, 1.685837) | tail=(-1.3e-05, 124.350426, 0.215125)
+    mixamorig:Spine1 | parent=mixamorig:Spine | head=(-1.3e-05, 124.350426, 0.215125) | tail=(-1.3e-05, 133.571198, -1.155518)
+    mixamorig:Spine2 | parent=mixamorig:Spine1 | head=(-1.3e-05, 133.571198, -1.155518) | tail=(-1.2e-05, 147.171127, -2.820159)
+    mixamorig:Neck | parent=mixamorig:Spine2 | head=(-1.2e-05, 150.311584, -3.204553) | tail=(-1.1e-05, 160.003632, -4.390865)
+    mixamorig:Head | parent=mixamorig:Neck | head=(-1.1e-05, 159.929474, -1.519545) | tail=(-9e-06, 183.036041, -4.347803)
+    mixamorig:HeadTop_End | parent=mixamorig:Head | head=(-9e-06, 181.966843, 5.98155) | tail=(-7e-06, 205.073395, 3.153292)
+    mixamorig:RightShoulder | parent=mixamorig:Spine2 | head=(-4.569982, 144.586105, -3.316402) | tail=(-15.162832, 144.061295, -5.548501)
+    mixamorig:RightArm | parent=mixamorig:RightShoulder | head=(-15.162827, 144.061295, -5.5485) | tail=(-43.004349, 144.061295, -5.548495)
+    mixamorig:RightForeArm | parent=mixamorig:RightArm | head=(-43.004345, 144.061295, -5.548504) | tail=(-71.333191, 144.061295, -5.5485)
+    mixamorig:RightHand | parent=mixamorig:RightForeArm | head=(-71.333183, 144.061295, -5.548485) | tail=(-79.559959, 144.061295, -5.548484)
+    mixamorig:RightHandThumb1 | parent=mixamorig:RightHand | head=(-73.797989, 142.487305, -2.866633) | tail=(-77.013176, 140.614532, -0.942354)
+    mixamorig:RightHandThumb2 | parent=mixamorig:RightHandThumb1 | head=(-77.013176, 140.614532, -0.942352) | tail=(-79.668015, 139.086548, 0.57026)
+    mixamorig:RightHandThumb3 | parent=mixamorig:RightHandThumb2 | head=(-79.668015, 139.086548, 0.570259) | tail=(-81.686836, 137.93454, 1.678313)
+    mixamorig:RightHandThumb4 | parent=mixamorig:RightHandThumb3 | head=(-81.686836, 137.93454, 1.678311) | tail=(-83.574936, 136.7892, 3.002625)
+    mixamorig:RightHandIndex1 | parent=mixamorig:RightHand | head=(-80.441467, 143.543427, -3.288651) | tail=(-84.141464, 143.543427, -3.287436)
+    mixamorig:RightHandIndex2 | parent=mixamorig:RightHandIndex1 | head=(-84.141464, 143.543442, -3.287436) | tail=(-86.99147, 143.543442, -3.287957)
+    mixamorig:RightHandIndex3 | parent=mixamorig:RightHandIndex2 | head=(-86.99147, 143.543442, -3.287958) | tail=(-89.763657, 143.543442, -3.287977)
+    mixamorig:RightHandIndex4 | parent=mixamorig:RightHandIndex3 | head=(-89.763657, 143.543442, -3.287977) | tail=(-92.535843, 143.543442, -3.28848)
+    mixamorig:RightHandMiddle1 | parent=mixamorig:RightHand | head=(-80.865685, 144.061249, -5.54851) | tail=(-84.565681, 144.061249, -5.544797)
+    mixamorig:RightHandMiddle2 | parent=mixamorig:RightHandMiddle1 | head=(-84.565681, 144.061264, -5.544797) | tail=(-87.515678, 144.061264, -5.546852)
+    mixamorig:RightHandMiddle3 | parent=mixamorig:RightHandMiddle2 | head=(-87.515678, 144.061264, -5.546851) | tail=(-90.462303, 144.061264, -5.547006)
+    mixamorig:RightHandMiddle4 | parent=mixamorig:RightHandMiddle3 | head=(-90.462311, 144.061279, -5.547006) | tail=(-93.408936, 144.061279, -5.548141)
+    mixamorig:RightHandRing1 | parent=mixamorig:RightHand | head=(-80.436775, 144.018219, -7.41362) | tail=(-83.816048, 144.018219, -7.414673)
+    mixamorig:RightHandRing2 | parent=mixamorig:RightHandRing1 | head=(-83.816048, 144.018219, -7.414673) | tail=(-86.705727, 144.018219, -7.414294)
+    mixamorig:RightHandRing3 | parent=mixamorig:RightHandRing2 | head=(-86.705734, 144.018219, -7.414294) | tail=(-89.344543, 144.018219, -7.413352)
+    mixamorig:RightHandRing4 | parent=mixamorig:RightHandRing3 | head=(-89.344551, 144.018219, -7.413352) | tail=(-91.983353, 144.018219, -7.408193)
+    mixamorig:RightHandPinky1 | parent=mixamorig:RightHand | head=(-79.409859, 143.574585, -9.354764) | tail=(-83.009865, 143.574554, -9.358511)
+    mixamorig:RightHandPinky2 | parent=mixamorig:RightHandPinky1 | head=(-83.009857, 143.574554, -9.358511) | tail=(-85.109856, 143.574539, -9.364251)
+    mixamorig:RightHandPinky3 | parent=mixamorig:RightHandPinky2 | head=(-85.109848, 143.574539, -9.364251) | tail=(-87.225632, 143.574524, -9.367932)
+    mixamorig:RightHandPinky4 | parent=mixamorig:RightHandPinky3 | head=(-87.225624, 143.574524, -9.367931) | tail=(-89.341408, 143.574509, -9.371438)
+    mixamorig:LeftShoulder | parent=mixamorig:Spine2 | head=(4.570434, 144.585907, -3.316373) | tail=(15.162806, 144.06131, -5.548493)
+    mixamorig:LeftArm | parent=mixamorig:LeftShoulder | head=(15.162804, 144.06131, -5.548493) | tail=(43.004326, 144.061279, -5.54847)
+    mixamorig:LeftForeArm | parent=mixamorig:LeftArm | head=(43.004326, 144.061279, -5.54847) | tail=(71.333153, 144.061249, -5.548447)
+    mixamorig:LeftHand | parent=mixamorig:LeftForeArm | head=(71.33316, 144.061249, -5.548452) | tail=(79.561035, 144.061234, -5.548446)
+    mixamorig:LeftHandThumb1 | parent=mixamorig:LeftHand | head=(73.799301, 142.485062, -2.866719) | tail=(77.017097, 140.613007, -0.950235)
+    mixamorig:LeftHandThumb2 | parent=mixamorig:LeftHandThumb1 | head=(77.017105, 140.613007, -0.950232) | tail=(79.673126, 139.084198, 0.564277)
+    mixamorig:LeftHandThumb3 | parent=mixamorig:LeftHandThumb2 | head=(79.673119, 139.084198, 0.564273) | tail=(81.694008, 137.93013, 1.679407)
+    mixamorig:LeftHandThumb4 | parent=mixamorig:LeftHandThumb3 | head=(81.694008, 137.93013, 1.679407) | tail=(83.602859, 136.779297, 2.979897)
+    mixamorig:LeftHandIndex1 | parent=mixamorig:LeftHand | head=(80.442467, 143.543213, -3.288582) | tail=(84.142464, 143.543198, -3.288905)
+    mixamorig:LeftHandIndex2 | parent=mixamorig:LeftHandIndex1 | head=(84.142464, 143.543198, -3.288905) | tail=(86.99247, 143.543182, -3.288555)
+    mixamorig:LeftHandIndex3 | parent=mixamorig:LeftHandIndex2 | head=(86.99247, 143.543182, -3.288555) | tail=(89.767342, 143.543167, -3.288582)
+    mixamorig:LeftHandIndex4 | parent=mixamorig:LeftHandIndex3 | head=(89.767334, 143.543182, -3.288582) | tail=(92.542206, 143.543167, -3.288681)
+    mixamorig:LeftHandMiddle1 | parent=mixamorig:LeftHand | head=(80.866562, 144.061279, -5.548408) | tail=(84.566559, 144.061279, -5.548639)
+    mixamorig:LeftHandMiddle2 | parent=mixamorig:LeftHandMiddle1 | head=(84.566559, 144.061264, -5.548639) | tail=(87.516556, 144.061264, -5.548698)
+    mixamorig:LeftHandMiddle3 | parent=mixamorig:LeftHandMiddle2 | head=(87.516563, 144.061264, -5.548698) | tail=(90.469429, 144.061264, -5.548635)
+    mixamorig:LeftHandMiddle4 | parent=mixamorig:LeftHandMiddle3 | head=(90.469421, 144.061264, -5.548635) | tail=(93.422287, 144.061264, -5.548407)
+    mixamorig:LeftHandRing1 | parent=mixamorig:LeftHand | head=(80.437691, 144.018219, -7.413526) | tail=(83.587685, 144.018219, -7.413484)
+    mixamorig:LeftHandRing2 | parent=mixamorig:LeftHandRing1 | head=(83.587692, 144.018204, -7.413484) | tail=(86.537689, 144.018204, -7.413444)
+    mixamorig:LeftHandRing3 | parent=mixamorig:LeftHandRing2 | head=(86.537689, 144.018204, -7.413446) | tail=(89.182007, 144.018204, -7.413411)
+    mixamorig:LeftHandRing4 | parent=mixamorig:LeftHandRing3 | head=(89.182007, 144.018188, -7.413388) | tail=(91.826324, 144.018188, -7.413267)
+    mixamorig:LeftHandPinky1 | parent=mixamorig:LeftHand | head=(79.410942, 143.574371, -9.354709) | tail=(83.010918, 143.574402, -9.339983)
+    mixamorig:LeftHandPinky2 | parent=mixamorig:LeftHandPinky1 | head=(83.01091, 143.574402, -9.339983) | tail=(85.110901, 143.574417, -9.332278)
+    mixamorig:LeftHandPinky3 | parent=mixamorig:LeftHandPinky2 | head=(85.110901, 143.574417, -9.332278) | tail=(87.23642, 143.574432, -9.324764)
+    mixamorig:LeftHandPinky4 | parent=mixamorig:LeftHandPinky3 | head=(87.236412, 143.574432, -9.324764) | tail=(89.361938, 143.574448, -9.318506)
+    mixamorig:RightUpLeg | parent=mixamorig:Hips | head=(-8.207794, 97.523201, -0.045244) | tail=(-8.207795, 53.153084, 0.300695)
+    mixamorig:RightLeg | parent=mixamorig:RightUpLeg | head=(-8.207795, 53.153088, 0.300695) | tail=(-8.207794, 8.729412, -2.742841)
+    mixamorig:RightFoot | parent=mixamorig:RightLeg | head=(-8.207794, 8.72941, -2.742841) | tail=(-8.207797, 0.00074, 7.96772)
+    mixamorig:RightToeBase | parent=mixamorig:RightFoot | head=(-8.207797, 0.00074, 7.96772) | tail=(-8.2078, 6.4e-05, 17.24584)
+    mixamorig:RightToe_End | parent=mixamorig:RightToeBase | head=(-8.2078, 6.4e-05, 17.24584) | tail=(-8.207803, -0.000613, 26.52396)
+    mixamorig:LeftUpLeg | parent=mixamorig:Hips | head=(8.207784, 97.52317, -0.04524) | tail=(8.207782, 53.153137, 0.301718)
+    mixamorig:LeftLeg | parent=mixamorig:LeftUpLeg | head=(8.207782, 53.153137, 0.301718) | tail=(8.207782, 8.729485, -2.742674)
+    mixamorig:LeftFoot | parent=mixamorig:LeftLeg | head=(8.207782, 8.729486, -2.742674) | tail=(8.207779, 0.000817, 7.967887)
+    mixamorig:LeftToeBase | parent=mixamorig:LeftFoot | head=(8.207779, 0.000818, 7.967886) | tail=(8.207776, 0.000141, 17.246023)
+    mixamorig:LeftToe_End | parent=mixamorig:LeftToeBase | head=(8.207776, 0.000141, 17.246023) | tail=(8.207773, -0.000535, 26.52416)
+
+MESH: Beta_Joints
+  location: (0.0, 0.0, 0.0)
+  rotation_euler: (0.0, -0.0, 0.0)
+  scale: (1.0, 1.0, 1.0)
+  vertices: 10514
+  polygons: 11120
+  materials: ['Beta_Joints_MAT1']
+  modifiers:
+    ARMATURE: Armature Armature
+  vertex groups: 39
+    mixamorig:Hips | weighted_vertices=382 | weight_sum=382.000000
+    mixamorig:Spine | weighted_vertices=382 | weight_sum=382.000000
+    mixamorig:Neck | weighted_vertices=382 | weight_sum=382.000000
+    mixamorig:RightShoulder | weighted_vertices=382 | weight_sum=76.400001
+    mixamorig:RightArm | weighted_vertices=382 | weight_sum=305.600005
+    mixamorig:RightForeArm | weighted_vertices=382 | weight_sum=382.000000
+    mixamorig:RightHand | weighted_vertices=918 | weight_sum=918.000000
+    mixamorig:RightHandThumb1 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:RightHandThumb2 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:RightHandThumb3 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:RightHandIndex2 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:RightHandIndex3 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:RightHandMiddle2 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:RightHandMiddle3 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:RightHandRing2 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:RightHandRing3 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:RightHandPinky2 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:RightHandPinky3 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:LeftShoulder | weighted_vertices=382 | weight_sum=76.400001
+    mixamorig:LeftArm | weighted_vertices=382 | weight_sum=305.600005
+    mixamorig:LeftForeArm | weighted_vertices=382 | weight_sum=382.000000
+    mixamorig:LeftHand | weighted_vertices=918 | weight_sum=918.000000
+    mixamorig:LeftHandThumb1 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:LeftHandThumb2 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:LeftHandThumb3 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:LeftHandIndex2 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:LeftHandIndex3 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:LeftHandMiddle2 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:LeftHandMiddle3 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:LeftHandRing2 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:LeftHandRing3 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:LeftHandPinky2 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:LeftHandPinky3 | weighted_vertices=134 | weight_sum=134.000000
+    mixamorig:RightUpLeg | weighted_vertices=382 | weight_sum=382.000000
+    mixamorig:RightLeg | weighted_vertices=382 | weight_sum=382.000000
+    mixamorig:RightFoot | weighted_vertices=764 | weight_sum=764.000000
+    mixamorig:LeftUpLeg | weighted_vertices=382 | weight_sum=382.000000
+    mixamorig:LeftLeg | weighted_vertices=382 | weight_sum=382.000000
+    mixamorig:LeftFoot | weighted_vertices=764 | weight_sum=764.000000
+
+MESH: Beta_Surface
+  location: (0.0, 0.0, 0.0)
+  rotation_euler: (0.0, -0.0, 0.0)
+  scale: (1.0, 1.0, 1.0)
+  vertices: 14232
+  polygons: 14222
+  materials: ['Beta_HighLimbsGeoSG3']
+  modifiers:
+    ARMATURE: Armature Armature
+  vertex groups: 50
+    mixamorig:Hips | weighted_vertices=534 | weight_sum=534.000000
+    mixamorig:Spine1 | weighted_vertices=1049 | weight_sum=673.135423
+    mixamorig:Spine2 | weighted_vertices=873 | weight_sum=269.857498
+    mixamorig:Head | weighted_vertices=523 | weight_sum=523.000000
+    mixamorig:RightShoulder | weighted_vertices=383 | weight_sum=255.005544
+    mixamorig:RightArm | weighted_vertices=400 | weight_sum=400.000000
+    mixamorig:RightForeArm | weighted_vertices=725 | weight_sum=725.000000
+    mixamorig:RightHand | weighted_vertices=294 | weight_sum=294.000000
+    mixamorig:RightHandThumb1 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:RightHandThumb2 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:RightHandThumb3 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:RightHandIndex1 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:RightHandIndex2 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:RightHandIndex3 | weighted_vertices=152 | weight_sum=152.000000
+    mixamorig:RightHandMiddle1 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:RightHandMiddle2 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:RightHandMiddle3 | weighted_vertices=286 | weight_sum=286.000000
+    mixamorig:RightHandRing1 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:RightHandRing2 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:RightHandRing3 | weighted_vertices=152 | weight_sum=152.000000
+    mixamorig:RightHandPinky1 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:RightHandPinky2 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:RightHandPinky3 | weighted_vertices=152 | weight_sum=152.000000
+    mixamorig:LeftShoulder | weighted_vertices=383 | weight_sum=255.001492
+    mixamorig:LeftArm | weighted_vertices=400 | weight_sum=400.000000
+    mixamorig:LeftForeArm | weighted_vertices=725 | weight_sum=725.000000
+    mixamorig:LeftHand | weighted_vertices=294 | weight_sum=294.000000
+    mixamorig:LeftHandThumb1 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:LeftHandThumb2 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:LeftHandThumb3 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:LeftHandIndex1 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:LeftHandIndex2 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:LeftHandIndex3 | weighted_vertices=152 | weight_sum=152.000000
+    mixamorig:LeftHandMiddle1 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:LeftHandMiddle2 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:LeftHandMiddle3 | weighted_vertices=152 | weight_sum=152.000000
+    mixamorig:LeftHandRing1 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:LeftHandRing2 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:LeftHandRing3 | weighted_vertices=152 | weight_sum=152.000000
+    mixamorig:LeftHandPinky1 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:LeftHandPinky2 | weighted_vertices=172 | weight_sum=172.000000
+    mixamorig:LeftHandPinky3 | weighted_vertices=152 | weight_sum=152.000000
+    mixamorig:RightUpLeg | weighted_vertices=653 | weight_sum=653.000000
+    mixamorig:RightLeg | weighted_vertices=400 | weight_sum=400.000000
+    mixamorig:RightFoot | weighted_vertices=610 | weight_sum=610.000000
+    mixamorig:RightToeBase | weighted_vertices=212 | weight_sum=212.000000
+    mixamorig:LeftUpLeg | weighted_vertices=653 | weight_sum=653.000000
+    mixamorig:LeftLeg | weighted_vertices=400 | weight_sum=400.000000
+    mixamorig:LeftFoot | weighted_vertices=610 | weight_sum=610.000000
+    mixamorig:LeftToeBase | weighted_vertices=212 | weight_sum=212.000000

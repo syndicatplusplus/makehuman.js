@@ -14,3 +14,4 @@ src/net/fs.ts
 src/net/fs_skel.ts
 src/net/fs_stub.ts
 package-lock.json
+static/external-models/

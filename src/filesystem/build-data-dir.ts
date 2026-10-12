@@ -69,17 +69,19 @@ async function main() {
 }
 
 function getMakehumanDirName() {
-    let makehumanDir = homedir()
-    switch (platform()) {
-        case "darwin":
-            makehumanDir = `${makehumanDir}${sep}Documents${sep}MakeHuman`
-            break
-        default:
-            makehumanDir = `${makehumanDir}${sep}makehuman`
-            break
+    if (platform() === "win32") {
+        return `Z:${sep}github${sep}makehuman-assets-cache`
     }
-    makehumanDir = `${makehumanDir}${sep}v1py3`
-    return makehumanDir
+
+    let makehumanDir = homedir()
+
+    if (platform() === "darwin") {
+        makehumanDir = `${makehumanDir}${sep}Documents${sep}MakeHuman`
+    } else {
+        makehumanDir = `${makehumanDir}${sep}makehuman`
+    }
+
+    return `${makehumanDir}${sep}v1py3`
 }
 
 function checkGitLFS() {
@@ -95,7 +97,7 @@ function checkGitLFS() {
 function updateAssetDirectory(assetDirectory: string) {
     console.info(`updating makehuman assets in directory '${assetDirectory}'`)
     try {
-        exec(`git -C ${assetDirectory} pull`)
+        exec(`git -C "${assetDirectory}" pull`)
     } catch (error) {
         console.warn(`ignoring failure to update: '${(error as any).message.trim()}'`)
     }
@@ -105,7 +107,7 @@ function cloneAssetDirectory(repository: string, branch: string, makehumanDir: s
     console.log(`downloading makehuman assets into directory '${makehumanDir}${sep}official_assets'`)
     try {
         mkdirSync(makehumanDir, { recursive: true })
-        exec(`git -C ${makehumanDir} clone -b '${branch}' '${repository}' official_assets`)
+        exec(`git -C "${makehumanDir}" clone -b "${branch}" "${repository}" official_assets`)
     } catch (error) {
         console.error(`\nunable to clone directory '${assetDirectory}'`)
         console.error((error as any).message.trim())

@@ -8,7 +8,7 @@ import { HTTPFSAdapter } from './filesystem/HTTPFSAdapter'
 
 import { Tab, Tabs } from 'toad.js/viewkit/Tab'
 import { Application, setRenderer } from 'Application'
-import { RenderHuman } from 'render/RenderHuman'
+import { RenderXBot } from 'render/RenderXBot'
 import { RenderView } from 'render/RenderView'
 import { PoseTab } from 'pose/PoseTab'
 import { ViewportControls } from 'ui/ViewportControls'
@@ -36,18 +36,13 @@ async function run() {
     installMobileUI()
 
     const app = new Application()
-
-    // Start directly in the body editor.
     app.tabModel.value = TAB.MORPH
 
-    // Use the smoother generic MakeHuman proxy as the visible mannequin.
-    // The hidden MakeHuman base mesh still drives morphs and skeleton deformation.
     const mannequinProxy = app.proxyManager.list.get(ProxyType.Proxymeshes)
     if (mannequinProxy !== undefined) {
         mannequinProxy.value = DEFAULT_MANNEQUIN_PROXY
     }
 
-    // App.glview needs to be set before other operations.
     const glview = (
         <RenderView
             app={app}
@@ -91,7 +86,7 @@ function MorphTab(props: { app: Application }) {
         <Tab
             label="Body"
             value={TAB.MORPH}
-            visibilityChange={setRenderer(props.app, new RenderHuman())}
+            visibilityChange={setRenderer(props.app, new RenderXBot())}
         >
             <div
                 style={{

@@ -1,4 +1,4 @@
-import { mat4 } from 'gl-matrix'
+import { mat4, vec4 } from 'gl-matrix'
 import { Application } from 'Application'
 import { RenderHandler } from './RenderHandler'
 import { RenderMesh } from './RenderMesh'
@@ -8,6 +8,21 @@ import { di } from 'lib/di'
 const XBOT_URL = 'static/external-models/xbot/xbot.nyanposer.json'
 const MANNEQUIN_COLOR = [0.88, 0.64, 0.62, 1]
 const TARGET_HEIGHT = 15
+
+export interface XBotRotation {
+    x: number
+    y: number
+    z: number
+}
+
+interface NyanposerBone {
+    name: string
+    parent: number
+    head: number[]
+    tail: number[]
+    bindMatrix: number[]
+    inverseBindMatrix: number[]
+}
 
 interface NyanposerMesh {
     name: string
@@ -22,13 +37,40 @@ interface NyanposerRigFile {
     version: number
     source: string
     coordinateSpace: string
+    armature: {
+        name: string
+        bones: NyanposerBone[]
+    }
     meshes: NyanposerMesh[]
+}
+
+interface Normalization {
+    scale: number
+    centerX: number
+    centerY: number
+    centerZ: number
+}
+
+function jsonMatrix(values: number[]): mat4 {
+    if (values.length !== 16) {
+        throw new Error(`Expected a 4x4 matrix, got ${values.length} values`)
+    }
+
+    const result = mat4.create()
+    for (let i = 0; i < 16; ++i) {
+        result[i] = values[i]
+    }
+    return result
 }
 
 export class RenderXBot extends RenderHandler {
     private data?: NyanposerRigFile
     private meshes?: RenderMesh[]
+    private normalization?: Normalization
     private loadError?: Error
+
+    private poseDegrees = new Map<string, XBotRotation>()
+    private poseDirty = true
 
     constructor() {
         super()
@@ -37,6 +79,48 @@ export class RenderXBot extends RenderHandler {
 
     override defaultCamera(): () => mat4 {
         return di.get(Application).bodyCamera
+    }
+
+    hasBone(name: string): boolean {
+        return this.data?.armature.bones.some((bone) => bone.name === name) ?? false
+    }
+
+    getBoneRotation(name: string): XBotRotation {
+        const rotation = this.poseDegrees.get(name)
+        if (rotation === undefined) {
+            return { x: 0, y: 0, z: 0 }
+        }
+
+        return { ...rotation }
+    }
+
+    setBoneRotation(
+        name: string,
+        x: number,
+        y: number,
+        z: number,
+    ): void {
+        this.poseDegrees.set(name, { x, y, z })
+        this.poseDirty = true
+        this.invalidate()
+    }
+
+    resetBone(name: string): void {
+        this.poseDegrees.delete(name)
+        this.poseDirty = true
+        this.invalidate()
+    }
+
+    resetPose(): void {
+        this.poseDegrees.clear()
+        this.poseDirty = true
+        this.invalidate()
+    }
+
+    private invalidate(): void {
+        const app = di.get(Application)
+        app.glview?.invalidate()
+        app.updateManager.invalidateView()
     }
 
     private async load() {
@@ -58,11 +142,18 @@ export class RenderXBot extends RenderHandler {
                 throw new Error('X Bot file contains no meshes')
             }
 
+            if (!data.armature?.bones?.length) {
+                throw new Error('X Bot file contains no bones')
+            }
+
             this.data = data
-            di.get(Application).updateManager.invalidateView()
+            this.normalization = this.computeRestNormalization(data)
+            this.poseDirty = true
+            this.invalidate()
 
             console.log(
-                `Loaded X Bot: ${data.meshes.length} meshes from ${XBOT_URL}`
+                `Loaded X Bot: ${data.meshes.length} meshes, ` +
+                `${data.armature.bones.length} bones`
             )
         } catch (error) {
             this.loadError =
@@ -86,12 +177,44 @@ export class RenderXBot extends RenderHandler {
             normalMatrix
         )
 
-        if (this.loadError !== undefined || this.data === undefined) {
+        if (
+            this.loadError !== undefined ||
+            this.data === undefined ||
+            this.normalization === undefined
+        ) {
             return
         }
 
         if (this.meshes === undefined) {
-            this.meshes = this.createMeshes(view, this.data)
+            const vertices = this.calculatePosedVertices(
+                this.data,
+                this.normalization,
+            )
+
+            this.meshes = this.data.meshes.map(
+                (mesh, index) =>
+                    new RenderMesh(
+                        view.gl,
+                        vertices[index],
+                        mesh.indices,
+                        undefined,
+                        undefined,
+                        false,
+                    ),
+            )
+
+            this.poseDirty = false
+        } else if (this.poseDirty) {
+            const vertices = this.calculatePosedVertices(
+                this.data,
+                this.normalization,
+            )
+
+            this.meshes.forEach((mesh, index) => {
+                mesh.update(vertices[index])
+            })
+
+            this.poseDirty = false
         }
 
         const gl = view.gl
@@ -109,12 +232,7 @@ export class RenderXBot extends RenderHandler {
         }
     }
 
-    private createMeshes(
-        view: RenderView,
-        data: NyanposerRigFile
-    ): RenderMesh[] {
-        const converted: Float32Array[] = []
-
+    private computeRestNormalization(data: NyanposerRigFile): Normalization {
         let minX = Number.POSITIVE_INFINITY
         let minY = Number.POSITIVE_INFINITY
         let minZ = Number.POSITIVE_INFINITY
@@ -124,7 +242,6 @@ export class RenderXBot extends RenderHandler {
 
         for (const mesh of data.meshes) {
             const src = mesh.positions
-            const dst = new Float32Array(src.length)
 
             for (let i = 0; i < src.length; i += 3) {
                 // Blender: X right, Y depth, Z up
@@ -133,10 +250,6 @@ export class RenderXBot extends RenderHandler {
                 const y = src[i + 2]
                 const z = -src[i + 1]
 
-                dst[i] = x
-                dst[i + 1] = y
-                dst[i + 2] = z
-
                 minX = Math.min(minX, x)
                 minY = Math.min(minY, y)
                 minZ = Math.min(minZ, z)
@@ -144,41 +257,158 @@ export class RenderXBot extends RenderHandler {
                 maxY = Math.max(maxY, y)
                 maxZ = Math.max(maxZ, z)
             }
-
-            converted.push(dst)
         }
 
         const height = maxY - minY
         if (!Number.isFinite(height) || height <= 0) {
-            throw new Error('X Bot has an invalid bounding box')
+            throw new Error('X Bot has an invalid rest bounding box')
         }
 
-        const scale = TARGET_HEIGHT / height
-        const centerX = (minX + maxX) * 0.5
-        const centerY = (minY + maxY) * 0.5
-        const centerZ = (minZ + maxZ) * 0.5
+        return {
+            scale: TARGET_HEIGHT / height,
+            centerX: (minX + maxX) * 0.5,
+            centerY: (minY + maxY) * 0.5,
+            centerZ: (minZ + maxZ) * 0.5,
+        }
+    }
 
-        console.log(
-            `X Bot bounds: height=${height.toFixed(3)}, scale=${scale.toFixed(3)}`
+    private calculatePosedVertices(
+        data: NyanposerRigFile,
+        normalization: Normalization,
+    ): Float32Array[] {
+        const bones = data.armature.bones
+
+        const bindGlobal = bones.map((bone) =>
+            jsonMatrix(bone.bindMatrix)
         )
 
-        return data.meshes.map((mesh, meshIndex) => {
-            const vertex = converted[meshIndex]
+        const inverseBindGlobal = bones.map((bone) =>
+            jsonMatrix(bone.inverseBindMatrix)
+        )
 
-            for (let i = 0; i < vertex.length; i += 3) {
-                vertex[i] = (vertex[i] - centerX) * scale
-                vertex[i + 1] = (vertex[i + 1] - centerY) * scale
-                vertex[i + 2] = (vertex[i + 2] - centerZ) * scale
+        const localRest = bones.map((bone, index) => {
+            if (bone.parent < 0) {
+                return mat4.clone(bindGlobal[index])
             }
 
-            return new RenderMesh(
-                view.gl,
-                vertex,
-                mesh.indices,
-                undefined,
-                undefined,
-                false
+            const parentInverse = mat4.invert(
+                mat4.create(),
+                bindGlobal[bone.parent],
             )
+
+            if (parentInverse === null) {
+                throw new Error(
+                    `Could not invert parent bind matrix for ${bone.name}`
+                )
+            }
+
+            return mat4.multiply(
+                mat4.create(),
+                parentInverse,
+                bindGlobal[index],
+            )
+        })
+
+        const localPose = localRest.map((rest, index) => {
+            const result = mat4.clone(rest)
+            const rotation = this.getBoneRotation(bones[index].name)
+
+            // Post-multiplication applies these rotations in the bone's
+            // imported local coordinate system.
+            mat4.rotateX(result, result, rotation.x * Math.PI / 180)
+            mat4.rotateY(result, result, rotation.y * Math.PI / 180)
+            mat4.rotateZ(result, result, rotation.z * Math.PI / 180)
+
+            return result
+        })
+
+        const poseGlobal: mat4[] = bones.map(() => mat4.create())
+
+        bones.forEach((bone, index) => {
+            if (bone.parent < 0) {
+                mat4.copy(poseGlobal[index], localPose[index])
+            } else {
+                mat4.multiply(
+                    poseGlobal[index],
+                    poseGlobal[bone.parent],
+                    localPose[index],
+                )
+            }
+        })
+
+        const skinMatrices = bones.map((bone, index) =>
+            mat4.multiply(
+                mat4.create(),
+                poseGlobal[index],
+                inverseBindGlobal[index],
+            )
+        )
+
+        return data.meshes.map((mesh) => {
+            const src = mesh.positions
+            const dst = new Float32Array(src.length)
+
+            for (
+                let vertexIndex = 0;
+                vertexIndex < src.length / 3;
+                ++vertexIndex
+            ) {
+                const offset = vertexIndex * 3
+                const source = vec4.fromValues(
+                    src[offset],
+                    src[offset + 1],
+                    src[offset + 2],
+                    1,
+                )
+
+                const influences = mesh.influences[vertexIndex]
+
+                let worldX = source[0]
+                let worldY = source[1]
+                let worldZ = source[2]
+
+                if (influences && influences.length > 0) {
+                    worldX = 0
+                    worldY = 0
+                    worldZ = 0
+                    let totalWeight = 0
+
+                    for (const [boneIndex, weight] of influences) {
+                        const transformed = vec4.transformMat4(
+                            vec4.create(),
+                            source,
+                            skinMatrices[boneIndex],
+                        )
+
+                        worldX += transformed[0] * weight
+                        worldY += transformed[1] * weight
+                        worldZ += transformed[2] * weight
+                        totalWeight += weight
+                    }
+
+                    if (totalWeight > 0) {
+                        worldX /= totalWeight
+                        worldY /= totalWeight
+                        worldZ /= totalWeight
+                    }
+                }
+
+                // Blender -> NYANPOSER coordinate conversion, followed by the
+                // FIXED rest-pose normalization. The model therefore does not
+                // re-center itself while you pose it.
+                const x = worldX
+                const y = worldZ
+                const z = -worldY
+
+                dst[offset] =
+                    (x - normalization.centerX) * normalization.scale
+                dst[offset + 1] =
+                    (y - normalization.centerY) * normalization.scale
+                dst[offset + 2] =
+                    (z - normalization.centerZ) * normalization.scale
+            }
+
+            return dst
         })
     }
 }

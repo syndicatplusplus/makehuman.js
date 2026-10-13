@@ -10,7 +10,7 @@ import { Tab, Tabs } from 'toad.js/viewkit/Tab'
 import { Application, setRenderer } from 'Application'
 import { RenderXBot } from 'render/RenderXBot'
 import { RenderView } from 'render/RenderView'
-import { PoseTab } from 'pose/PoseTab'
+import { XBotPoseTab } from 'pose/XBotPoseTab'
 import { ViewportControls } from 'ui/ViewportControls'
 import { MannequinControls } from 'ui/MannequinControls'
 import { BodyControls } from 'ui/BodyControls'
@@ -36,6 +36,8 @@ async function run() {
     installMobileUI()
 
     const app = new Application()
+    const xbotRenderer = new RenderXBot()
+
     app.tabModel.value = TAB.MORPH
 
     const mannequinProxy = app.proxyManager.list.get(ProxyType.Proxymeshes)
@@ -67,8 +69,14 @@ async function run() {
                             height: '100%',
                         }}
                     >
-                        <MorphTab app={app} />
-                        <PoseTab app={app} />
+                        <MorphTab
+                            app={app}
+                            renderer={xbotRenderer}
+                        />
+                        <XBotPoseTab
+                            app={app}
+                            renderer={xbotRenderer}
+                        />
                     </Tabs>
                 </div>
 
@@ -81,12 +89,18 @@ async function run() {
     )
 }
 
-function MorphTab(props: { app: Application }) {
+function MorphTab(props: {
+    app: Application
+    renderer: RenderXBot
+}) {
     return (
         <Tab
             label="Body"
             value={TAB.MORPH}
-            visibilityChange={setRenderer(props.app, new RenderXBot())}
+            visibilityChange={setRenderer(
+                props.app,
+                props.renderer,
+            )}
         >
             <div
                 style={{

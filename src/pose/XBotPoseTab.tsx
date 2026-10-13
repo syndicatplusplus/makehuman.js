@@ -10,6 +10,10 @@ import { OptionModel } from 'toad.js/appkit/OptionModel'
 import { NumberModel } from 'toad.js/appkit/NumberModel'
 import { XBOT_POSE_BONES } from './XBotPoseBones'
 import { XBotPoseSelectMode } from './XBotPoseSelectMode'
+import {
+    XBotHandPoseControls,
+    XBOT_HAND_SYNC_EVENT,
+} from './XBotHandPoseControls'
 
 function PoseAxis(props: {
     label: string
@@ -47,10 +51,6 @@ export function XBotPoseTab(props: {
 
     let syncingControls = false
     let poseSelectMode: XBotPoseSelectMode | undefined
-
-    // Keep track of which bone the visible X/Y/Z controls currently belong to.
-    // This is intentionally separate from boneModel.value. When a selection
-    // changes, we save the old controls first, then load the new bone.
     let controlsBone = 'none'
 
     const setAxisControlsEnabled = (enabled: boolean) => {
@@ -107,9 +107,6 @@ export function XBotPoseTab(props: {
             return
         }
 
-        // Write to the bone the controls actually represent, rather than
-        // blindly trusting the newest dropdown/pick value. This prevents a
-        // late model signal from zeroing a bone that was just posed.
         commitControlsToBone(controlsBone)
     }
 
@@ -121,11 +118,15 @@ export function XBotPoseTab(props: {
 
         renderer.resetBone(selectedBone)
         loadSelectedBone()
+
+        window.dispatchEvent(new Event(XBOT_HAND_SYNC_EVENT))
     }
 
     const resetWholePose = () => {
         renderer.resetPose()
         loadSelectedBone()
+
+        window.dispatchEvent(new Event(XBOT_HAND_SYNC_EVENT))
     }
 
     const rendererVisibility = setRenderer(app, renderer)
@@ -148,7 +149,6 @@ export function XBotPoseTab(props: {
 
             app.glview.invalidate()
         } else if (poseSelectMode !== undefined) {
-            // Save any last in-flight control value before leaving Pose.
             commitControlsToBone(controlsBone)
 
             app.glview.popInputHandler()
@@ -159,10 +159,6 @@ export function XBotPoseTab(props: {
     loadSelectedBone()
 
     boneModel.signal.add(() => {
-        // IMPORTANT:
-        // Selection can change immediately after a gizmo/slider move. Save
-        // the values belonging to the old bone before loadSelectedBone()
-        // replaces the X/Y/Z controls with the new bone's values.
         commitControlsToBone(controlsBone)
         loadSelectedBone()
     })
@@ -237,6 +233,14 @@ export function XBotPoseTab(props: {
                     selection. Touch dragging still orbits the camera, while
                     two-finger gestures continue to pan and zoom.
                 </p>
+
+                <XBotHandPoseControls
+                    app={app}
+                    renderer={renderer}
+                    selectBone={(boneName) => {
+                        boneModel.value = boneName
+                    }}
+                />
             </div>
         </Tab>
     )

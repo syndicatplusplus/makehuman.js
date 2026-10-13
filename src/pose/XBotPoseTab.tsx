@@ -8,33 +8,8 @@ import { TextField } from 'toad.js/viewkit/TextField'
 import { Button } from 'toad.js/viewkit/Button'
 import { OptionModel } from 'toad.js/appkit/OptionModel'
 import { NumberModel } from 'toad.js/appkit/NumberModel'
-
-const XBOT_POSE_BONES: ReadonlyArray<[string, string]> = [
-    ['none', 'None'],
-
-    ['mixamorig:Hips', 'Hips / lower torso'],
-    ['mixamorig:Spine2', 'Chest'],
-    ['mixamorig:Neck', 'Neck'],
-    ['mixamorig:Head', 'Head'],
-
-    ['mixamorig:LeftShoulder', 'Left shoulder'],
-    ['mixamorig:LeftArm', 'Left upper arm'],
-    ['mixamorig:LeftForeArm', 'Left forearm'],
-    ['mixamorig:LeftHand', 'Left wrist'],
-
-    ['mixamorig:RightShoulder', 'Right shoulder'],
-    ['mixamorig:RightArm', 'Right upper arm'],
-    ['mixamorig:RightForeArm', 'Right forearm'],
-    ['mixamorig:RightHand', 'Right wrist'],
-
-    ['mixamorig:LeftUpLeg', 'Left thigh'],
-    ['mixamorig:LeftLeg', 'Left shin'],
-    ['mixamorig:LeftFoot', 'Left foot'],
-
-    ['mixamorig:RightUpLeg', 'Right thigh'],
-    ['mixamorig:RightLeg', 'Right shin'],
-    ['mixamorig:RightFoot', 'Right foot'],
-]
+import { XBOT_POSE_BONES } from './XBotPoseBones'
+import { XBotPoseSelectMode } from './XBotPoseSelectMode'
 
 function PoseAxis(props: {
     label: string
@@ -71,6 +46,12 @@ export function XBotPoseTab(props: {
     const zModel = new NumberModel(0, { min: -180, max: 180, step: 1 })
 
     let syncingControls = false
+    let poseSelectMode: XBotPoseSelectMode | undefined
+
+    // Keep track of which bone the visible X/Y/Z controls currently belong to.
+    // This is intentionally separate from boneModel.value. When a selection
+    // changes, we save the old controls first, then load the new bone.
+    let controlsBone = 'none'
 
     const setAxisControlsEnabled = (enabled: boolean) => {
         xModel.enabled = enabled
@@ -78,47 +59,67 @@ export function XBotPoseTab(props: {
         zModel.enabled = enabled
     }
 
-    const loadSelectedBone = () => {
-        if (boneModel.value === 'none') {
-            syncingControls = true
-            xModel.value = 0
-            yModel.value = 0
-            zModel.value = 0
-            syncingControls = false
-            setAxisControlsEnabled(false)
-            return
-        }
-
-        setAxisControlsEnabled(true)
-
-        const rotation = renderer.getBoneRotation(boneModel.value)
-
-        syncingControls = true
-        xModel.value = rotation.x
-        yModel.value = rotation.y
-        zModel.value = rotation.z
-        syncingControls = false
-    }
-
-    const applySelectedBone = () => {
-        if (syncingControls || boneModel.value === 'none') {
+    const commitControlsToBone = (boneName: string) => {
+        if (boneName === 'none') {
             return
         }
 
         renderer.setBoneRotation(
-            boneModel.value,
+            boneName,
             xModel.value,
             yModel.value,
             zModel.value,
         )
     }
 
-    const resetSelectedBone = () => {
-        if (boneModel.value === 'none') {
+    const loadSelectedBone = () => {
+        const selectedBone = boneModel.value
+
+        if (selectedBone === 'none') {
+            syncingControls = true
+            xModel.value = 0
+            yModel.value = 0
+            zModel.value = 0
+            syncingControls = false
+
+            controlsBone = 'none'
+            setAxisControlsEnabled(false)
+            app.glview?.invalidate()
             return
         }
 
-        renderer.resetBone(boneModel.value)
+        setAxisControlsEnabled(true)
+
+        const rotation = renderer.getBoneRotation(selectedBone)
+
+        syncingControls = true
+        xModel.value = rotation.x
+        yModel.value = rotation.y
+        zModel.value = rotation.z
+        syncingControls = false
+
+        controlsBone = selectedBone
+        app.glview?.invalidate()
+    }
+
+    const applySelectedBone = () => {
+        if (syncingControls || controlsBone === 'none') {
+            return
+        }
+
+        // Write to the bone the controls actually represent, rather than
+        // blindly trusting the newest dropdown/pick value. This prevents a
+        // late model signal from zeroing a bone that was just posed.
+        commitControlsToBone(controlsBone)
+    }
+
+    const resetSelectedBone = () => {
+        const selectedBone = boneModel.value
+        if (selectedBone === 'none') {
+            return
+        }
+
+        renderer.resetBone(selectedBone)
         loadSelectedBone()
     }
 
@@ -127,9 +128,45 @@ export function XBotPoseTab(props: {
         loadSelectedBone()
     }
 
+    const rendererVisibility = setRenderer(app, renderer)
+
+    const poseVisibility = (state: 'visible' | 'hidden') => {
+        rendererVisibility(state)
+
+        if (state === 'visible') {
+            if (poseSelectMode === undefined) {
+                poseSelectMode = new XBotPoseSelectMode(
+                    app,
+                    renderer,
+                    boneModel,
+                    xModel,
+                    yModel,
+                    zModel,
+                )
+                app.glview.pushInputHandler(poseSelectMode)
+            }
+
+            app.glview.invalidate()
+        } else if (poseSelectMode !== undefined) {
+            // Save any last in-flight control value before leaving Pose.
+            commitControlsToBone(controlsBone)
+
+            app.glview.popInputHandler()
+            poseSelectMode = undefined
+        }
+    }
+
     loadSelectedBone()
 
-    boneModel.signal.add(() => loadSelectedBone())
+    boneModel.signal.add(() => {
+        // IMPORTANT:
+        // Selection can change immediately after a gizmo/slider move. Save
+        // the values belonging to the old bone before loadSelectedBone()
+        // replaces the X/Y/Z controls with the new bone's values.
+        commitControlsToBone(controlsBone)
+        loadSelectedBone()
+    })
+
     xModel.signal.add(() => applySelectedBone())
     yModel.signal.add(() => applySelectedBone())
     zModel.signal.add(() => applySelectedBone())
@@ -138,7 +175,7 @@ export function XBotPoseTab(props: {
         <Tab
             label="Pose"
             value={TAB.POSE}
-            visibilityChange={setRenderer(app, renderer)}
+            visibilityChange={poseVisibility}
         >
             <div
                 class="pose-scroll-panel"
@@ -152,8 +189,10 @@ export function XBotPoseTab(props: {
                 <h2 style={{ marginTop: 0 }}>X Bot Pose</h2>
 
                 <p style={{ lineHeight: '1.5' }}>
-                    First X Bot posing pass. Choose a major joint, then rotate
-                    it around its imported local X, Y and Z axes.
+                    Tap or click a body part to select it. Drag a colored
+                    rotation ring to rotate that joint around its imported
+                    local X, Y or Z axis, or use the sliders for precise
+                    adjustment.
                 </p>
 
                 <div style={{ margin: '20px 0 26px 0' }}>
@@ -194,9 +233,9 @@ export function XBotPoseTab(props: {
                         lineHeight: '1.45',
                     }}
                 >
-                    For this checkpoint, X Bot is controlled from the dropdown
-                    and sliders only. Direct body-part selection, the floating
-                    gizmo, hand controls, and pose files come next.
+                    Tap/click empty space or press Escape to clear the
+                    selection. Touch dragging still orbits the camera, while
+                    two-finger gestures continue to pan and zoom.
                 </p>
             </div>
         </Tab>

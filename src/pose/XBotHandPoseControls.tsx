@@ -40,7 +40,7 @@ const FINGER_NAME: Record<FingerKey, string> = {
 // These are intentionally a little softer than a mathematically maxed-out
 // fist so the mannequin remains useful as an art-reference figure.
 const CURL_MAX: Record<FingerKey, [number, number, number]> = {
-    thumb: [48, 58, 48],
+    thumb: [35, 45, 35],
     index: [62, 82, 72],
     middle: [66, 88, 76],
     ring: [68, 90, 78],
@@ -196,18 +196,33 @@ export function XBotHandPoseControls(props: {
 
                 const existing = renderer.getBoneRotation(name)
 
-                const curlDegrees = curlMax[joint - 1] * curl
-                const spreadDegrees =
-                    joint === 1
-                        ? hand.spread * spreadWeight * spreadMirror
-                        : 0
+if (finger === 'thumb') {
+    const thumbMirror = side === 'Left' ? -1 : 1
+    const thumbCurl =
+        curlMax[joint - 1] * curl * thumbMirror
 
-                renderer.setBoneRotation(
-                    name,
-                    curlDegrees,
-                    existing.y,
-                    spreadDegrees,
-                )
+    renderer.setBoneRotation(
+        name,
+        existing.x,
+        existing.y,
+        thumbCurl,
+    )
+
+    continue
+}
+
+const curlDegrees = curlMax[joint - 1] * curl
+const spreadDegrees =
+    joint === 1
+        ? hand.spread * spreadWeight * spreadMirror
+        : 0
+
+renderer.setBoneRotation(
+    name,
+    curlDegrees,
+    existing.y,
+    spreadDegrees,
+)
             }
         }
     }
@@ -229,7 +244,12 @@ export function XBotHandPoseControls(props: {
                 const maxDegrees = CURL_MAX[finger][joint - 1]
 
                 if (maxDegrees !== 0) {
-                    ratios.push(rotation.x / maxDegrees)
+                    if (finger === 'thumb') {
+                        const thumbMirror = side === 'Left' ? -1 : 1
+                        ratios.push(rotation.z / (maxDegrees * thumbMirror))
+                    } else {
+                        ratios.push(rotation.x / maxDegrees)
+                    }
                 }
             }
 

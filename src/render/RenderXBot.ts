@@ -23,6 +23,13 @@ export interface XBotBoneFrame {
     axisZ: vec3
 }
 
+export interface XBotPoseFile {
+    format: 'nyanposer-pose'
+    version: 1
+    model: 'xbot'
+    bones: Record<string, XBotRotation>
+}
+
 interface NyanposerBone {
     name: string
     parent: number
@@ -69,6 +76,26 @@ function jsonMatrix(values: number[]): mat4 {
         result[i] = values[i]
     }
     return result
+}
+
+function isFiniteRotation(value: unknown): value is XBotRotation {
+    if (
+        typeof value !== 'object' ||
+        value === null
+    ) {
+        return false
+    }
+
+    const rotation = value as Partial<XBotRotation>
+
+    return (
+        typeof rotation.x === 'number' &&
+        Number.isFinite(rotation.x) &&
+        typeof rotation.y === 'number' &&
+        Number.isFinite(rotation.y) &&
+        typeof rotation.z === 'number' &&
+        Number.isFinite(rotation.z)
+    )
 }
 
 export class RenderXBot extends RenderHandler {
@@ -118,6 +145,111 @@ export class RenderXBot extends RenderHandler {
 
     resetPose(): void {
         this.poseDegrees.clear()
+        this.poseDirty = true
+        this.poseGlobalCache = undefined
+        this.invalidate()
+    }
+
+    exportPose(): XBotPoseFile {
+        const bones: Record<string, XBotRotation> = {}
+
+        for (const [name, rotation] of this.poseDegrees.entries()) {
+            // Keep the files compact. Bones that are effectively at rest do
+            // not need to be written at all.
+            if (
+                Math.abs(rotation.x) < 0.000001 &&
+                Math.abs(rotation.y) < 0.000001 &&
+                Math.abs(rotation.z) < 0.000001
+            ) {
+                continue
+            }
+
+            bones[name] = { ...rotation }
+        }
+
+        return {
+            format: 'nyanposer-pose',
+            version: 1,
+            model: 'xbot',
+            bones,
+        }
+    }
+
+    importPose(pose: unknown): void {
+        if (this.data === undefined) {
+            throw new Error('X Bot is still loading. Try again in a moment.')
+        }
+
+        if (
+            typeof pose !== 'object' ||
+            pose === null
+        ) {
+            throw new Error('That file does not contain a NYANPOSER pose.')
+        }
+
+        const candidate = pose as Partial<XBotPoseFile>
+
+        if (candidate.format !== 'nyanposer-pose') {
+            throw new Error('That file is not a NYANPOSER pose file.')
+        }
+
+        if (candidate.version !== 1) {
+            throw new Error(
+                `Unsupported NYANPOSER pose version: ${candidate.version}`
+            )
+        }
+
+        if (candidate.model !== 'xbot') {
+            throw new Error(
+                `This pose is for '${candidate.model ?? 'an unknown model'}', not X Bot.`
+            )
+        }
+
+        if (
+            typeof candidate.bones !== 'object' ||
+            candidate.bones === null ||
+            Array.isArray(candidate.bones)
+        ) {
+            throw new Error('The pose file has no valid bone data.')
+        }
+
+        const nextPose = new Map<string, XBotRotation>()
+        let recognizedBones = 0
+
+        for (const [name, rotation] of Object.entries(candidate.bones)) {
+            if (!this.hasBone(name)) {
+                // Forward compatibility: a future rig may contain additional
+                // bones. Ignore names the current X Bot does not understand.
+                continue
+            }
+
+            if (!isFiniteRotation(rotation)) {
+                throw new Error(
+                    `The pose contains invalid rotation data for '${name}'.`
+                )
+            }
+
+            nextPose.set(name, {
+                x: rotation.x,
+                y: rotation.y,
+                z: rotation.z,
+            })
+            recognizedBones += 1
+        }
+
+        // An entirely neutral pose legitimately contains zero saved bones.
+        // A non-empty file where none of the names match is more likely to be
+        // the wrong rig, so reject that case rather than silently doing nothing.
+        if (
+            Object.keys(candidate.bones).length > 0 &&
+            recognizedBones === 0
+        ) {
+            throw new Error(
+                'None of the bones in this pose match the current X Bot rig.'
+            )
+        }
+
+        this.poseDegrees = nextPose
         this.poseDirty = true
         this.poseGlobalCache = undefined
         this.invalidate()

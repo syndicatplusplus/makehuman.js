@@ -14,6 +14,7 @@ import {
     XBotHandPoseControls,
     XBOT_HAND_SYNC_EVENT,
 } from './XBotHandPoseControls'
+import { XBotPoseFileControls } from './XBotPoseFileControls'
 
 function PoseAxis(props: {
     label: string
@@ -110,6 +111,12 @@ export function XBotPoseTab(props: {
         commitControlsToBone(controlsBone)
     }
 
+    const syncAllPoseControls = () => {
+        loadSelectedBone()
+        window.dispatchEvent(new Event(XBOT_HAND_SYNC_EVENT))
+        app.glview?.invalidate()
+    }
+
     const resetSelectedBone = () => {
         const selectedBone = boneModel.value
         if (selectedBone === 'none') {
@@ -117,16 +124,12 @@ export function XBotPoseTab(props: {
         }
 
         renderer.resetBone(selectedBone)
-        loadSelectedBone()
-
-        window.dispatchEvent(new Event(XBOT_HAND_SYNC_EVENT))
+        syncAllPoseControls()
     }
 
     const resetWholePose = () => {
         renderer.resetPose()
-        loadSelectedBone()
-
-        window.dispatchEvent(new Event(XBOT_HAND_SYNC_EVENT))
+        syncAllPoseControls()
     }
 
     const rendererVisibility = setRenderer(app, renderer)
@@ -190,6 +193,14 @@ export function XBotPoseTab(props: {
                     local X, Y or Z axis, or use the sliders for precise
                     adjustment.
                 </p>
+
+                <XBotPoseFileControls
+                    renderer={renderer}
+                    beforeSave={() => {
+                        commitControlsToBone(controlsBone)
+                    }}
+                    afterPoseChanged={syncAllPoseControls}
+                />
 
                 <div style={{ margin: '20px 0 26px 0' }}>
                     <div style={{ marginBottom: '8px' }}>

@@ -77,7 +77,6 @@ export class GLView extends View {
         if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
             canvas.width = canvas.clientWidth
             canvas.height = canvas.clientHeight
-            // console.log(`canvas ${canvas.clientWidth} x ${canvas.clientHeight}`)
         }
     }
 
@@ -110,7 +109,6 @@ export class GLView extends View {
 
     prepare() {
         const projectionMatrix = this.prepareProjection()
-
         const modelViewMatrix = this.ctx.camera
 
         const normalMatrix = mat4.create()
@@ -128,6 +126,7 @@ export class GLView extends View {
         this._inputHandlerStack.push(inputHandler)
         return inputHandler.info()
     }
+
     popInputHandler(): string | undefined {
         this._inputHandlerStack.pop()?.destructor()
         let handler
@@ -142,15 +141,13 @@ export class GLView extends View {
         if (this.draw) {
             this.draw()
         }
-        // if (this.app.renderer) {
-        //     this.app.renderer.paint(this.app, this)
-        // }
-        // console.log(`this._inputHandlerStack.length = ${this._inputHandlerStack.length }`)
         for (let i = this._inputHandlerStack.length - 1; i >= 0; --i) {
             this._inputHandlerStack[i]!.paint()
         }
     }
+
     protected _redrawIsPending = false;
+
     invalidate() {
         if (this._redrawIsPending) {
             return
@@ -173,7 +170,6 @@ export class GLView extends View {
      * setup handling of pointer, keyboard and resize event
      */
     private setupEventHandling() {
-        const ctx = this.ctx
         const canvas = this.canvas
 
         //
@@ -184,10 +180,12 @@ export class GLView extends View {
         //
         // pointer
         //
-        let downX = 0, downY = 0, buttonDown = false
+        let buttonDown = false
+
         canvas.oncontextmenu = (ev: MouseEvent) => {
             ev.preventDefault()
         }
+
         canvas.onpointerdown = (ev: PointerEvent) => {
             for (let i = this._inputHandlerStack.length - 1; i >= 0; --i) {
                 this._inputHandlerStack[i]!.pointerdown(ev)
@@ -195,16 +193,12 @@ export class GLView extends View {
                     return
                 }
             }
-            ev.preventDefault()
 
-            // if (this.renderHandler && !this.renderHandler.onpointerdown(ev)) {
-            //     return
-            // }
+            ev.preventDefault()
             canvas.setPointerCapture(ev.pointerId)
             buttonDown = true
-            downX = ev.x
-            downY = ev.y
         }
+
         canvas.onpointerup = (ev: PointerEvent) => {
             for (let i = this._inputHandlerStack.length - 1; i >= 0; --i) {
                 this._inputHandlerStack[i]!.pointerup(ev)
@@ -212,16 +206,11 @@ export class GLView extends View {
                     return
                 }
             }
+
             ev.preventDefault()
-            // if (
-            //     !buttonDown &&
-            //     this.renderHandler &&
-            //     !this.renderHandler.onpointerup(ev)
-            // ) {
-            //     return
-            // }
             buttonDown = false
         }
+
         canvas.onpointermove = (ev: PointerEvent) => {
             for (let i = this._inputHandlerStack.length - 1; i >= 0; --i) {
                 this._inputHandlerStack[i]!.pointermove(ev)
@@ -229,26 +218,29 @@ export class GLView extends View {
                     return
                 }
             }
+
             ev.preventDefault()
-            // if (
-            //     !buttonDown &&
-            //     this.renderHandler &&
-            //     !this.renderHandler.onpointermove(ev)
-            // ) {
-            //     return
-            // }
-            // if (buttonDown) {
-            //     const x = ev.x - downX
-            //     const y = ev.y - downY
-            //     if (x !== 0 || y !== 0) {
-            //         ctx.rotateY += x
-            //         ctx.rotateX += y
-            //         downX = ev.x
-            //         downY = ev.y
-            //         requestAnimationFrame(this.paint)
-            //     }
-            // }
         }
+
+        const cancelPointer = (ev: PointerEvent) => {
+            // Cancellation is cleanup, so every input handler receives it.
+            // This prevents an interrupted touch from remaining as a
+            // "ghost" finger and forcing later gestures into pan/zoom mode.
+            for (let i = this._inputHandlerStack.length - 1; i >= 0; --i) {
+                this._inputHandlerStack[i]!.pointercancel(ev)
+            }
+
+            buttonDown = false
+        }
+
+        canvas.onpointercancel = cancelPointer
+
+        // iPadOS/Safari may drop pointer capture while changing input
+        // sources, especially while alternating between Pencil and fingers.
+        canvas.addEventListener(
+            'lostpointercapture',
+            cancelPointer as EventListener,
+        )
 
         //
         // keyboard
@@ -260,7 +252,6 @@ export class GLView extends View {
                     break
                 }
             }
-            // ev.preventDefault()
         }
 
         window.onkeydown = (ev: KeyboardEvent) => {
@@ -270,8 +261,9 @@ export class GLView extends View {
                     break
                 }
             }
-            // ev.preventDefault()
         }
+
+        void buttonDown
     }
 }
 GLView.define('tx-glview', GLView)

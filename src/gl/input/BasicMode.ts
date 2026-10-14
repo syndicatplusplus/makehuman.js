@@ -81,6 +81,8 @@ export class BasicMode extends InputHandler {
 
     override destructor(): void {
         this._view.canvas.removeEventListener('wheel', this._wheel)
+        this.resetTouchState()
+        this.resetMouseState()
     }
 
     override info() {
@@ -99,6 +101,7 @@ export class BasicMode extends InputHandler {
                 ctx.projection = Projection.ORTHOGONAL
                 this._view.invalidate()
                 break
+
             case 'Numpad7':
                 if (ev.ctrlKey) {
                     ctx.rotateCameraTo(-90, 0, 0)
@@ -108,6 +111,7 @@ export class BasicMode extends InputHandler {
                 ctx.projection = Projection.ORTHOGONAL
                 this._view.invalidate()
                 break
+
             case 'Numpad3':
                 if (ev.ctrlKey) {
                     ctx.rotateCameraTo(0, 90, 0)
@@ -117,22 +121,27 @@ export class BasicMode extends InputHandler {
                 ctx.projection = Projection.ORTHOGONAL
                 this._view.invalidate()
                 break
+
             case 'Numpad4':
                 mat4.rotateY(ctx.camera, ctx.camera, deg2rad(11.25))
                 this._view.invalidate()
                 break
+
             case 'Numpad6':
                 mat4.rotateY(ctx.camera, ctx.camera, deg2rad(-11.25))
                 this._view.invalidate()
                 break
+
             case 'Numpad8':
                 mat4.rotateX(ctx.camera, ctx.camera, deg2rad(11.25))
                 this._view.invalidate()
                 break
+
             case 'Numpad2':
                 mat4.rotateX(ctx.camera, ctx.camera, deg2rad(-11.25))
                 this._view.invalidate()
                 break
+
             case 'Numpad5':
                 ctx.projection =
                     ctx.projection === Projection.ORTHOGONAL
@@ -140,6 +149,7 @@ export class BasicMode extends InputHandler {
                         : Projection.ORTHOGONAL
                 this._view.invalidate()
                 break
+
             case 'Numpad0': {
                 const defaultCamera = this._view.ctx.defaultCamera?.()
                 if (defaultCamera) {
@@ -148,11 +158,51 @@ export class BasicMode extends InputHandler {
                 }
                 break
             }
+
             case 'Backquote':
                 if (ev.shiftKey) {
                     this._view.pushInputHandler(new FlyMode(this._view))
                 }
                 break
+        }
+    }
+
+    private resetMouseState() {
+        this._down = undefined
+        this._camera = undefined
+        this._center = undefined
+        this._dragMode = 'orbit'
+    }
+
+    private resetTouchState() {
+        this._touches.clear()
+        this._touchMode = undefined
+        this._touchCamera = undefined
+        this._touchCenter = undefined
+        this._touchStartPoint = undefined
+        this._touchStartMidpoint = undefined
+        this._touchStartDistance = 0
+    }
+
+    private restartTouchGestureAfterPointerEnds() {
+        if (this._touches.size >= 2) {
+            this.beginTwoFingerTouch()
+            return
+        }
+
+        if (this._touches.size === 1) {
+            const remaining =
+                this._touches.values().next().value as Point
+            this.beginSingleTouch(remaining)
+            return
+        }
+
+        this.resetTouchState()
+    }
+
+    private releasePointerCapture(pointerId: number) {
+        if (this._view.canvas.hasPointerCapture(pointerId)) {
+            this._view.canvas.releasePointerCapture(pointerId)
         }
     }
 
@@ -376,25 +426,8 @@ export class BasicMode extends InputHandler {
             this._touches.has(ev.pointerId)
         ) {
             this._touches.delete(ev.pointerId)
-
-            if (this._view.canvas.hasPointerCapture(ev.pointerId)) {
-                this._view.canvas.releasePointerCapture(ev.pointerId)
-            }
-
-            if (this._touches.size >= 2) {
-                this.beginTwoFingerTouch()
-            } else if (this._touches.size === 1) {
-                const remaining =
-                    this._touches.values().next().value as Point
-                this.beginSingleTouch(remaining)
-            } else {
-                this._touchMode = undefined
-                this._touchCamera = undefined
-                this._touchCenter = undefined
-                this._touchStartPoint = undefined
-                this._touchStartMidpoint = undefined
-                this._touchStartDistance = 0
-            }
+            this.releasePointerCapture(ev.pointerId)
+            this.restartTouchGestureAfterPointerEnds()
 
             ev.preventDefault()
             return
@@ -404,9 +437,21 @@ export class BasicMode extends InputHandler {
             return
         }
 
+        this.releasePointerCapture(ev.pointerId)
+        this.resetMouseState()
         ev.preventDefault()
-        this._down = undefined
-        this._camera = undefined
-        this._center = undefined
+    }
+
+    override pointercancel(ev: PointerEvent): void {
+        if (ev.pointerType === 'touch') {
+            // iPadOS may cancel a finger pointer while the input source
+            // changes. Remove it immediately so it cannot remain as a
+            // ghost second finger and force later gestures into pan mode.
+            this._touches.delete(ev.pointerId)
+            this.restartTouchGestureAfterPointerEnds()
+            return
+        }
+
+        this.resetMouseState()
     }
 }

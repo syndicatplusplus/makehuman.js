@@ -10,4 +10,5 @@ export class InputHandler {
     pointerdown(_ev: PointerEvent): void {}
     pointermove(_ev: PointerEvent): void {}
     pointerup(_ev: PointerEvent): void {}
+    pointercancel(_ev: PointerEvent): void {}
 }

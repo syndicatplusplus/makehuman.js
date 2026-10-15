@@ -7,12 +7,18 @@ import { FileSystemAdapter } from './filesystem/FileSystemAdapter'
 import { HTTPFSAdapter } from './filesystem/HTTPFSAdapter'
 
 import { Tab, Tabs } from 'toad.js/viewkit/Tab'
-import { Application, setRenderer } from 'Application'
+import { OptionModel } from 'toad.js/appkit/OptionModel'
+import { Application } from 'Application'
+import { RenderHuman } from 'render/RenderHuman'
 import { RenderXBot } from 'render/RenderXBot'
 import { RenderView } from 'render/RenderView'
-import { XBotPoseTab } from 'pose/XBotPoseTab'
+import { UnifiedPoseTab } from 'pose/UnifiedPoseTab'
 import { ViewportControls } from 'ui/ViewportControls'
-import { MannequinControls } from 'ui/MannequinControls'
+import {
+    MANNEQUIN_OPTIONS,
+    MANNEQUIN_XBOT,
+    MannequinControls,
+} from 'ui/MannequinControls'
 import { BodyControls } from 'ui/BodyControls'
 import { installMobileUI } from 'ui/MobileUI'
 
@@ -36,14 +42,32 @@ async function run() {
     installMobileUI()
 
     const app = new Application()
+    const humanRenderer = new RenderHuman()
     const xbotRenderer = new RenderXBot()
 
     app.tabModel.value = TAB.MORPH
 
     const mannequinProxy = app.proxyManager.list.get(ProxyType.Proxymeshes)
-    if (mannequinProxy !== undefined) {
+
+    let initialMannequin = DEFAULT_MANNEQUIN_PROXY
+
+    if (
+        mannequinProxy !== undefined &&
+        MANNEQUIN_OPTIONS.some(
+            ([value]) =>
+                value !== MANNEQUIN_XBOT &&
+                value === mannequinProxy.value,
+        )
+    ) {
+        initialMannequin = mannequinProxy.value
+    } else if (mannequinProxy !== undefined) {
         mannequinProxy.value = DEFAULT_MANNEQUIN_PROXY
     }
+
+    const mannequinModel = new OptionModel<string>(
+        initialMannequin,
+        MANNEQUIN_OPTIONS,
+    )
 
     const glview = (
         <RenderView
@@ -71,11 +95,16 @@ async function run() {
                     >
                         <MorphTab
                             app={app}
-                            renderer={xbotRenderer}
+                            humanRenderer={humanRenderer}
+                            xbotRenderer={xbotRenderer}
+                            mannequinModel={mannequinModel}
                         />
-                        <XBotPoseTab
+
+                        <UnifiedPoseTab
                             app={app}
-                            renderer={xbotRenderer}
+                            humanRenderer={humanRenderer}
+                            xbotRenderer={xbotRenderer}
+                            mannequinModel={mannequinModel}
                         />
                     </Tabs>
                 </div>
@@ -91,16 +120,66 @@ async function run() {
 
 function MorphTab(props: {
     app: Application
-    renderer: RenderXBot
+    humanRenderer: RenderHuman
+    xbotRenderer: RenderXBot
+    mannequinModel: OptionModel<string>
 }) {
+    const {
+        app,
+        humanRenderer,
+        xbotRenderer,
+        mannequinModel,
+    } = props
+
+    const syncBodyMode = () => {
+        const xbotSelected =
+            mannequinModel.value === MANNEQUIN_XBOT
+
+        const humanControls = document.getElementById(
+            'human-body-controls',
+        )
+        const xbotMessage = document.getElementById(
+            'xbot-body-message',
+        )
+
+        if (humanControls !== null) {
+            humanControls.style.display =
+                xbotSelected
+                    ? 'none'
+                    : 'flex'
+        }
+
+        if (xbotMessage !== null) {
+            xbotMessage.style.display =
+                xbotSelected
+                    ? 'block'
+                    : 'none'
+        }
+
+        if (app.tabModel.value === TAB.MORPH) {
+            app.setRenderer(
+                xbotSelected
+                    ? xbotRenderer
+                    : humanRenderer,
+            )
+            app.glview?.invalidate()
+        }
+    }
+
+    mannequinModel.signal.add(syncBodyMode)
+    requestAnimationFrame(syncBodyMode)
+
+    const bodyVisibility = (state: 'visible' | 'hidden') => {
+        if (state === 'visible') {
+            syncBodyMode()
+        }
+    }
+
     return (
         <Tab
             label="Body"
             value={TAB.MORPH}
-            visibilityChange={setRenderer(
-                props.app,
-                props.renderer,
-            )}
+            visibilityChange={bodyVisibility}
         >
             <div
                 style={{
@@ -111,8 +190,49 @@ function MorphTab(props: {
                     overflow: 'hidden',
                 }}
             >
-                <MannequinControls app={props.app} />
-                <BodyControls app={props.app} />
+                <MannequinControls
+                    app={app}
+                    model={mannequinModel}
+                />
+
+                <div
+                    id="human-body-controls"
+                    style={{
+                        display: 'flex',
+                        flex: '1 1 auto',
+                        minHeight: 0,
+                        overflow: 'hidden',
+                    }}
+                >
+                    <BodyControls app={app} />
+                </div>
+
+                <div
+                    id="xbot-body-message"
+                    style={{
+                        display: 'none',
+                        flex: '1 1 auto',
+                        boxSizing: 'border-box',
+                        padding: 'var(--app-panel-padding)',
+                        overflowY: 'auto',
+                    }}
+                >
+                    <h2 style={{ margin: '0 0 10px 0' }}>
+                        X Bot
+                    </h2>
+
+                    <p
+                        style={{
+                            margin: 0,
+                            opacity: 0.72,
+                            lineHeight: '1.5',
+                        }}
+                    >
+                        X Bot has fixed body proportions, so MakeHuman body
+                        morph sliders do not apply to it. Use the Pose tab to
+                        adjust its skeleton.
+                    </p>
+                </div>
             </div>
         </Tab>
     )

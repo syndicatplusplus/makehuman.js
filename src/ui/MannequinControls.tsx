@@ -1,35 +1,91 @@
 import { Application } from 'Application'
+import { SliderNode } from 'modifier/loadSliders'
 import { ProxyType } from 'proxy/Proxy'
 import { OptionModel } from 'toad.js/appkit/OptionModel'
+import { NumberModel } from 'toad.js/appkit/NumberModel'
 import { Select } from 'toad.js/viewkit/Select'
 
-const MANNEQUIN_OPTIONS: ReadonlyArray<[string, string]> = [
+export const MANNEQUIN_XBOT = 'xbot'
+
+export const MANNEQUIN_OPTIONS: ReadonlyArray<[string, string]> = [
     ['female_generic', 'Feminine'],
     ['male_generic', 'Masculine'],
+    [MANNEQUIN_XBOT, 'X Bot'],
 ]
 
-export function MannequinControls(props: { app: Application }) {
+function findSliderModel(
+    node: SliderNode | undefined,
+    label: string,
+): NumberModel | undefined {
+    let current = node
+
+    while (current !== undefined) {
+        if (current.label === label && current.model !== undefined) {
+            return current.model
+        }
+
+        const nested = findSliderModel(current.down, label)
+        if (nested !== undefined) {
+            return nested
+        }
+
+        current = current.next
+    }
+
+    return undefined
+}
+
+export function MannequinControls(props: {
+    app: Application
+    model: OptionModel<string>
+}) {
     const proxyModel = props.app.proxyManager.list.get(ProxyType.Proxymeshes)
 
     if (proxyModel === undefined) {
         return <></>
     }
 
-    const initialValue =
-        MANNEQUIN_OPTIONS.some(([value]) => value === proxyModel.value)
-            ? proxyModel.value
-            : 'female_generic'
-
-    const mannequinModel = new OptionModel<string>(
-        initialValue,
-        MANNEQUIN_OPTIONS,
+    const genderModel = findSliderModel(
+        props.app.sliderNodes,
+        'Gender',
     )
 
-    mannequinModel.signal.add(() => {
-        if (proxyModel.value !== mannequinModel.value) {
-            proxyModel.value = mannequinModel.value
+    const syncHumanMannequin = () => {
+        const mannequin = props.model.value
+
+        if (mannequin === MANNEQUIN_XBOT) {
+            return
         }
-    })
+
+        /*
+         * The mannequin selector chooses a useful starting point rather than
+         * locking the body to a sex value. After selecting Feminine or
+         * Masculine, the ordinary Gender slider remains fully editable for
+         * androgynous or intermediate body shapes.
+         */
+        if (genderModel !== undefined) {
+            const targetGender =
+                mannequin === 'male_generic'
+                    ? 1
+                    : 0
+
+            if (genderModel.value !== targetGender) {
+                genderModel.value = targetGender
+            }
+        }
+
+        if (proxyModel.value !== mannequin) {
+            proxyModel.value = mannequin
+        }
+    }
+
+    /*
+     * Apply the selected mannequin once when the controls are created, then
+     * again only when the mannequin selector itself changes. Editing the
+     * Gender slider afterward will therefore not be snapped back to 0 or 1.
+     */
+    syncHumanMannequin()
+    props.model.signal.add(syncHumanMannequin)
 
     return (
         <div
@@ -51,7 +107,7 @@ export function MannequinControls(props: { app: Application }) {
             >
                 <strong>Mannequin</strong>
                 <Select
-                    model={mannequinModel}
+                    model={props.model}
                     style={{ width: '100%' }}
                 />
             </div>
@@ -64,7 +120,9 @@ export function MannequinControls(props: { app: Application }) {
                     lineHeight: '1.35',
                 }}
             >
-                Switching mannequins keeps the current body morphs and pose.
+                Feminine starts Gender at 0 and Masculine at 1. The Gender
+                slider remains editable for intermediate body shapes. X Bot
+                uses its own fixed body and skeleton.
             </p>
         </div>
     )

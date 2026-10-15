@@ -36,9 +36,13 @@ const FINGER_NAME: Record<FingerKey, string> = {
     pinky: 'Pinky',
 }
 
-// X Bot / Mixamo finger bones use local X as their useful flexion axis.
-// These are intentionally a little softer than a mathematically maxed-out
-// fist so the mannequin remains useful as an art-reference figure.
+/*
+ * These are the coordinated curl targets used by the convenient hand
+ * sliders. The gizmo can still move each phalanx independently.
+ *
+ * X Bot's four fingers flex mainly on local X. The thumb uses mirrored local
+ * Z so it folds into the palm correctly on both hands.
+ */
 const CURL_MAX: Record<FingerKey, [number, number, number]> = {
     thumb: [35, 45, 35],
     index: [62, 82, 72],
@@ -47,8 +51,6 @@ const CURL_MAX: Record<FingerKey, [number, number, number]> = {
     pinky: [70, 92, 80],
 }
 
-// Spread uses local Z on the first phalanx.
-// The right hand is mirrored in applyHand().
 const SPREAD_WEIGHT: Partial<Record<FingerKey, number>> = {
     index: 1.0,
     middle: 0.25,
@@ -127,7 +129,6 @@ function focusHand(
         1,
     )
 
-    // Preserve the current viewing angle, center the wrist, then zoom in.
     const camera = mat4.clone(app.glview.ctx.camera)
     camera[12] = 0
     camera[13] = 0
@@ -179,50 +180,109 @@ export function XBotHandPoseControls(props: {
 
     let syncing = false
 
-    const applyHand = (side: HandSide) => {
+    const announceHandChanged = () => {
+        /*
+         * This one event keeps both directions synchronized:
+         * hand sliders -> selected finger XYZ/gizmo controls
+         * finger gizmo -> hand curl/spread controls
+         */
+        window.dispatchEvent(new Event(XBOT_HAND_SYNC_EVENT))
+        app.glview.invalidate()
+    }
+
+    const applyFingerCurl = (
+        side: HandSide,
+        finger: FingerKey,
+    ) => {
+        const hand = state[side]
+        const curl = hand[finger] / 100
+        const curlMax = CURL_MAX[finger]
+
+        for (let joint = 1; joint <= 3; ++joint) {
+            const name = boneName(side, finger, joint)
+            if (!renderer.hasBone(name)) {
+                continue
+            }
+
+            const existing = renderer.getBoneRotation(name)
+
+            if (finger === 'thumb') {
+                const thumbMirror = side === 'Left' ? -1 : 1
+                const thumbCurl =
+                    curlMax[joint - 1] * curl * thumbMirror
+
+                /*
+                 * Curl only owns the thumb's useful flexion axis. Preserve
+                 * any extra X/Y fine-tuning made with the gizmo.
+                 */
+                renderer.setBoneRotation(
+                    name,
+                    existing.x,
+                    existing.y,
+                    thumbCurl,
+                )
+            } else {
+                const curlDegrees = curlMax[joint - 1] * curl
+
+                /*
+                 * Curl only owns local X. Preserve Y and Z, including manual
+                 * gizmo tweaks and whatever spread is currently applied.
+                 */
+                renderer.setBoneRotation(
+                    name,
+                    curlDegrees,
+                    existing.y,
+                    existing.z,
+                )
+            }
+        }
+    }
+
+    const applyAllCurls = (side: HandSide) => {
+        for (const finger of Object.keys(fingerModels) as FingerKey[]) {
+            applyFingerCurl(side, finger)
+        }
+    }
+
+    const applySpread = (side: HandSide) => {
         const hand = state[side]
         const spreadMirror = side === 'Left' ? 1 : -1
 
-        for (const finger of Object.keys(fingerModels) as FingerKey[]) {
-            const curl = hand[finger] / 100
-            const curlMax = CURL_MAX[finger]
-            const spreadWeight = SPREAD_WEIGHT[finger] ?? 0
+        for (const finger of Object.keys(SPREAD_WEIGHT) as FingerKey[]) {
+            const weight = SPREAD_WEIGHT[finger] ?? 0
+            if (weight === 0) {
+                continue
+            }
 
+            const name = boneName(side, finger, 1)
+            if (!renderer.hasBone(name)) {
+                continue
+            }
+
+            const existing = renderer.getBoneRotation(name)
+            const spreadDegrees =
+                hand.spread * weight * spreadMirror
+
+            /*
+             * Spread owns only Z on the first phalanx. Keep curl and any Y
+             * fine-tuning intact.
+             */
+            renderer.setBoneRotation(
+                name,
+                existing.x,
+                existing.y,
+                spreadDegrees,
+            )
+        }
+    }
+
+    const resetHandBones = (side: HandSide) => {
+        for (const finger of Object.keys(fingerModels) as FingerKey[]) {
             for (let joint = 1; joint <= 3; ++joint) {
                 const name = boneName(side, finger, joint)
-                if (!renderer.hasBone(name)) {
-                    continue
+                if (renderer.hasBone(name)) {
+                    renderer.resetBone(name)
                 }
-
-                const existing = renderer.getBoneRotation(name)
-
-if (finger === 'thumb') {
-    const thumbMirror = side === 'Left' ? -1 : 1
-    const thumbCurl =
-        curlMax[joint - 1] * curl * thumbMirror
-
-    renderer.setBoneRotation(
-        name,
-        existing.x,
-        existing.y,
-        thumbCurl,
-    )
-
-    continue
-}
-
-const curlDegrees = curlMax[joint - 1] * curl
-const spreadDegrees =
-    joint === 1
-        ? hand.spread * spreadWeight * spreadMirror
-        : 0
-
-renderer.setBoneRotation(
-    name,
-    curlDegrees,
-    existing.y,
-    spreadDegrees,
-)
             }
         }
     }
@@ -245,8 +305,15 @@ renderer.setBoneRotation(
 
                 if (maxDegrees !== 0) {
                     if (finger === 'thumb') {
-                        const thumbMirror = side === 'Left' ? -1 : 1
-                        ratios.push(rotation.z / (maxDegrees * thumbMirror))
+                        const thumbMirror =
+                            side === 'Left'
+                                ? -1
+                                : 1
+
+                        ratios.push(
+                            rotation.z /
+                            (maxDegrees * thumbMirror),
+                        )
                     } else {
                         ratios.push(rotation.x / maxDegrees)
                     }
@@ -255,8 +322,10 @@ renderer.setBoneRotation(
 
             const ratio =
                 ratios.length > 0
-                    ? ratios.reduce((sum, value) => sum + value, 0) /
-                        ratios.length
+                    ? ratios.reduce(
+                        (sum, value) => sum + value,
+                        0,
+                    ) / ratios.length
                     : 0
 
             hand[finger] = clamp(ratio * 100, 0, 100)
@@ -284,8 +353,10 @@ renderer.setBoneRotation(
         hand.spread =
             spreadSamples.length > 0
                 ? clamp(
-                    spreadSamples.reduce((sum, value) => sum + value, 0) /
-                        spreadSamples.length,
+                    spreadSamples.reduce(
+                        (sum, value) => sum + value,
+                        0,
+                    ) / spreadSamples.length,
                     -30,
                     30,
                 )
@@ -329,7 +400,8 @@ renderer.setBoneRotation(
     allModel.signal.add(() => {
         if (syncing) return
 
-        const hand = state[sideModel.value]
+        const side = sideModel.value
+        const hand = state[side]
         hand.all = allModel.value
 
         syncing = true
@@ -339,14 +411,20 @@ renderer.setBoneRotation(
         }
         syncing = false
 
-        applyHand(sideModel.value)
+        /*
+         * All curl intentionally owns the curl axis of all five digits, but
+         * it does not touch spread or unrelated gizmo-tuned axes.
+         */
+        applyAllCurls(side)
+        announceHandChanged()
     })
 
     for (const finger of Object.keys(fingerModels) as FingerKey[]) {
         fingerModels[finger].signal.add(() => {
             if (syncing) return
 
-            const hand = state[sideModel.value]
+            const side = sideModel.value
+            const hand = state[side]
             hand[finger] = fingerModels[finger].value
 
             hand.all =
@@ -362,25 +440,48 @@ renderer.setBoneRotation(
             allModel.value = hand.all
             syncing = false
 
-            applyHand(sideModel.value)
+            /*
+             * Crucially, an individual slider now touches only that one
+             * finger. Fine-tuning another digit with the gizmo is left alone.
+             */
+            applyFingerCurl(side, finger)
+            announceHandChanged()
         })
     }
 
     spreadModel.signal.add(() => {
         if (syncing) return
 
-        state[sideModel.value].spread = spreadModel.value
-        applyHand(sideModel.value)
+        const side = sideModel.value
+        state[side].spread = spreadModel.value
+
+        applySpread(side)
+        announceHandChanged()
     })
 
     const relaxHand = () => {
-        state[sideModel.value] = freshState()
-        loadSide(sideModel.value)
-        applyHand(sideModel.value)
+        const side = sideModel.value
+
+        /*
+         * Relax is intentionally a true reset of every finger phalanx,
+         * including custom gizmo twists.
+         */
+        resetHandBones(side)
+        state[side] = freshState()
+        loadSide(side)
+        announceHandChanged()
     }
 
     const makeFist = () => {
-        const hand = state[sideModel.value]
+        const side = sideModel.value
+
+        /*
+         * Make fist is also intentionally canonical. Clear manual per-joint
+         * twists first, then apply the coordinated fist recipe.
+         */
+        resetHandBones(side)
+
+        const hand = state[side]
         hand.all = 100
         hand.thumb = 100
         hand.index = 100
@@ -389,8 +490,10 @@ renderer.setBoneRotation(
         hand.pinky = 100
         hand.spread = 0
 
-        loadSide(sideModel.value)
-        applyHand(sideModel.value)
+        loadSide(side)
+        applyAllCurls(side)
+        applySpread(side)
+        announceHandChanged()
     }
 
     const bodyView = () => {
@@ -403,9 +506,6 @@ renderer.setBoneRotation(
         syncControlsFromRenderer,
     )
 
-    // The JSON may still be loading when this component is created. A second
-    // sync on the first animation frame catches the normal fast-load case,
-    // while changing a hand or using any control also re-reads the renderer.
     syncControlsFromRenderer()
     requestAnimationFrame(syncControlsFromRenderer)
 
@@ -427,7 +527,7 @@ renderer.setBoneRotation(
                 }}
             >
                 Focus on one hand, then curl the whole hand or adjust each
-                finger. Spread fans the four fingers apart.
+                finger. Fine-tune individual phalanges with the gizmo.
             </p>
 
             <div style={{ marginBottom: '14px' }}>
@@ -475,9 +575,9 @@ renderer.setBoneRotation(
                     lineHeight: '1.4',
                 }}
             >
-                Curl drives the three weighted Mixamo finger joints together,
-                so one slider bends a complete finger instead of making you
-                rotate each phalanx separately.
+                Gizmo edits update these sliders. An individual curl slider
+                changes only that finger; All curl, Relax hand, and Make fist
+                intentionally affect the whole hand.
             </p>
         </div>
     )

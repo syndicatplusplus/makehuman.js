@@ -50,6 +50,11 @@ interface TouchPickCandidate {
     moved: boolean
 }
 
+interface PointerPoint {
+    x: number
+    y: number
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
 const GIZMO_RADIUS = 58
@@ -61,10 +66,17 @@ const TOUCH_TAP_MOVE_THRESHOLD = 12
 const GIZMO_SEGMENTS = 64
 const GIZMO_DEGREES_PER_PIXEL = 0.75
 
+const POSE_MIN_DEGREES = -180
+const POSE_MAX_DEGREES = 180
+
 const GIZMO_COLORS: Record<GizmoAxis, string> = {
     x: '#ff5f56',
     y: '#5bd66f',
     z: '#4da3ff',
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value))
 }
 
 function pointSegmentDistance(
@@ -159,6 +171,16 @@ export class XBotPoseSelectMode extends InputHandler {
     private gizmoDrag?: GizmoDrag
     private touchPicks = new Map<number, TouchPickCandidate>()
 
+    /*
+     * Pointer events can arrive faster than the display can paint, especially
+     * from a mouse, Pencil, or high-refresh touch screen. Queue only the most
+     * recent gizmo position and apply it once per animation frame. This avoids
+     * recalculating the skinned X Bot mesh for pointer events the user could
+     * never actually see.
+     */
+    private pendingGizmoPoint?: PointerPoint
+    private gizmoAnimationFrame?: number
+
     constructor(
         app: Application,
         renderer: RenderXBot,
@@ -195,6 +217,9 @@ export class XBotPoseSelectMode extends InputHandler {
     }
 
     override destructor(): void {
+        this.cancelPendingGizmoFrame()
+        this.touchPicks.clear()
+        this.gizmoDrag = undefined
         this.overlayGroup.remove()
         this.app.glview.canvas.style.cursor = ''
     }
@@ -254,6 +279,7 @@ export class XBotPoseSelectMode extends InputHandler {
                     lastY: ev.clientY - rect.top,
                 }
 
+                this.pendingGizmoPoint = undefined
                 this.hoverAxis = axis
                 this.app.glview.canvas.setPointerCapture(ev.pointerId)
                 this.app.glview.canvas.style.cursor = 'grabbing'
@@ -298,36 +324,13 @@ export class XBotPoseSelectMode extends InputHandler {
     override pointermove(ev: PointerEvent): void {
         if (this.gizmoDrag !== undefined) {
             const rect = this.app.glview.canvas.getBoundingClientRect()
-            const x = ev.clientX - rect.left
-            const y = ev.clientY - rect.top
 
-            const rings = this.getGizmoRings()
-            const ring = rings.find(
-                (candidate) => candidate.axis === this.gizmoDrag!.axis,
-            )
-
-            if (ring !== undefined) {
-                const tangent = nearestPolylineTangent(
-                    this.gizmoDrag.lastX,
-                    this.gizmoDrag.lastY,
-                    ring.points,
-                )
-
-                if (tangent !== undefined) {
-                    const dx = x - this.gizmoDrag.lastX
-                    const dy = y - this.gizmoDrag.lastY
-                    const pixelsAlongRing = dx * tangent.x + dy * tangent.y
-                    const delta = pixelsAlongRing * GIZMO_DEGREES_PER_PIXEL
-
-                    if (Math.abs(delta) > 0.01) {
-                        const model = this.axisModels[this.gizmoDrag.axis]
-                        model.value = model.value + delta
-                    }
-                }
+            this.pendingGizmoPoint = {
+                x: ev.clientX - rect.left,
+                y: ev.clientY - rect.top,
             }
 
-            this.gizmoDrag.lastX = x
-            this.gizmoDrag.lastY = y
+            this.scheduleGizmoFrame()
             this.app.glview.canvas.style.cursor = 'grabbing'
             ev.preventDefault()
             return
@@ -405,6 +408,12 @@ export class XBotPoseSelectMode extends InputHandler {
             return
         }
 
+        /*
+         * Apply the last queued pointer position before ending the drag so a
+         * quick release cannot drop the final few pixels of movement.
+         */
+        this.flushPendingGizmoDrag()
+        this.cancelPendingGizmoFrame()
         this.gizmoDrag = undefined
 
         if (this.app.glview.canvas.hasPointerCapture(ev.pointerId)) {
@@ -416,13 +425,102 @@ export class XBotPoseSelectMode extends InputHandler {
         ev.preventDefault()
     }
 
+    override pointercancel(ev: PointerEvent): void {
+        if (ev.pointerType === 'touch') {
+            this.touchPicks.delete(ev.pointerId)
+
+            // If iPadOS interrupts a touch gesture, any remaining touch
+            // candidates should not later be treated as clean taps.
+            for (const candidate of this.touchPicks.values()) {
+                candidate.moved = true
+            }
+        }
+
+        if (this.gizmoDrag !== undefined) {
+            this.cancelPendingGizmoFrame()
+            this.gizmoDrag = undefined
+            this.hoverAxis = undefined
+            this.app.glview.canvas.style.cursor = ''
+            this.app.glview.invalidate()
+        }
+    }
+
     override paint(): void {
         this.drawOption(this.hoverGroup, this.hoverValue, false)
         this.drawOption(this.selectedGroup, this.boneModel.value, true)
         this.drawGizmo()
     }
 
+    private scheduleGizmoFrame(): void {
+        if (this.gizmoAnimationFrame !== undefined) {
+            return
+        }
+
+        this.gizmoAnimationFrame = requestAnimationFrame(() => {
+            this.gizmoAnimationFrame = undefined
+            this.flushPendingGizmoDrag()
+        })
+    }
+
+    private cancelPendingGizmoFrame(): void {
+        if (this.gizmoAnimationFrame !== undefined) {
+            cancelAnimationFrame(this.gizmoAnimationFrame)
+            this.gizmoAnimationFrame = undefined
+        }
+
+        this.pendingGizmoPoint = undefined
+    }
+
+    private flushPendingGizmoDrag(): void {
+        if (
+            this.gizmoDrag === undefined ||
+            this.pendingGizmoPoint === undefined
+        ) {
+            return
+        }
+
+        const point = this.pendingGizmoPoint
+        this.pendingGizmoPoint = undefined
+
+        const rings = this.getGizmoRings()
+        const ring = rings.find(
+            (candidate) => candidate.axis === this.gizmoDrag!.axis,
+        )
+
+        if (ring !== undefined) {
+            const tangent = nearestPolylineTangent(
+                this.gizmoDrag.lastX,
+                this.gizmoDrag.lastY,
+                ring.points,
+            )
+
+            if (tangent !== undefined) {
+                const dx = point.x - this.gizmoDrag.lastX
+                const dy = point.y - this.gizmoDrag.lastY
+                const pixelsAlongRing = dx * tangent.x + dy * tangent.y
+                const delta = pixelsAlongRing * GIZMO_DEGREES_PER_PIXEL
+
+                if (Math.abs(delta) > 0.01) {
+                    const model = this.axisModels[this.gizmoDrag.axis]
+                    const nextValue = clamp(
+                        model.value + delta,
+                        POSE_MIN_DEGREES,
+                        POSE_MAX_DEGREES,
+                    )
+
+                    if (nextValue !== model.value) {
+                        model.value = nextValue
+                    }
+                }
+            }
+        }
+
+        this.gizmoDrag.lastX = point.x
+        this.gizmoDrag.lastY = point.y
+    }
+
     private clearSelection(): void {
+        this.cancelPendingGizmoFrame()
         this.boneModel.value = 'none'
         this.hoverValue = undefined
         this.hoverAxis = undefined

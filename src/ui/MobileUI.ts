@@ -1,4 +1,9 @@
 const STYLE_ID = 'makehuman-mobile-ui'
+const PANEL_TOGGLE_ID = 'app-panel-toggle'
+const PANEL_HIDDEN_CLASS = 'app-controls-hidden'
+const CONTROL_SELECTOR = 'tx-button, tx-slider, tx-text, tx-select'
+
+let enhanceFrame: number | undefined
 
 function isTouchLayout(): boolean {
     return (
@@ -69,15 +74,6 @@ function enhanceSelectPopup(host: HTMLElement, touch: boolean) {
     popup.style.maxHeight = touch ? '55vh' : '45vh'
     popup.style.overflowY = 'auto'
 
-    /*
-     * TOAD positions select popups as `position: fixed` using the select's
-     * viewport coordinates. That works acceptably on desktop, but on a
-     * scrollable iPad control panel the popup is left behind while the panel
-     * moves. On touch layouts, anchor the popup to the select itself instead.
-     *
-     * This keeps the menu directly below the field and makes it scroll with
-     * the Body/Pose panel rather than floating over the page.
-     */
     if (touch) {
         host.style.position = 'relative'
         host.style.overflow = 'visible'
@@ -105,7 +101,10 @@ function enhanceSelectPopup(host: HTMLElement, touch: boolean) {
 }
 
 function enhanceSelect(host: HTMLElement, touch: boolean) {
-    host.style.minHeight = touch ? '48px' : '36px'
+    const controlHeight = touch ? '48px' : '36px'
+
+    host.style.height = controlHeight
+    host.style.minHeight = controlHeight
 
     const root = host.shadowRoot
     if (root === null) return
@@ -114,7 +113,8 @@ function enhanceSelect(host: HTMLElement, touch: boolean) {
     const button = root.querySelector('button') as HTMLButtonElement | null
 
     if (display) {
-        display.style.minHeight = touch ? '48px' : '36px'
+        display.style.height = controlHeight
+        display.style.minHeight = controlHeight
         display.style.fontSize = touch ? '17px' : '15px'
         display.style.padding = touch ? '11px 12px' : '7px 9px'
         display.style.boxSizing = 'border-box'
@@ -123,8 +123,18 @@ function enhanceSelect(host: HTMLElement, touch: boolean) {
     }
 
     if (button) {
-        button.style.width = touch ? '48px' : '36px'
-        button.style.minWidth = touch ? '48px' : '36px'
+        button.style.width = controlHeight
+        button.style.minWidth = controlHeight
+        button.style.height = controlHeight
+        button.style.minHeight = controlHeight
+        button.style.padding = '0'
+        button.style.margin = '0'
+        button.style.boxSizing = 'border-box'
+        button.style.display = 'flex'
+        button.style.alignItems = 'center'
+        button.style.justifyContent = 'center'
+        button.style.lineHeight = '1'
+        button.style.verticalAlign = 'middle'
     }
 
     if (host.dataset.mobileSelectHook !== '1') {
@@ -160,6 +170,79 @@ function enhanceControls() {
     })
 }
 
+function scheduleEnhanceControls() {
+    if (enhanceFrame !== undefined) {
+        return
+    }
+
+    enhanceFrame = window.requestAnimationFrame(() => {
+        enhanceFrame = undefined
+        enhanceControls()
+        ensurePanelToggle()
+    })
+}
+
+function updatePanelToggleState(button: HTMLButtonElement) {
+    const hidden = document.body.classList.contains(PANEL_HIDDEN_CLASS)
+
+    const expanded = hidden ? 'false' : 'true'
+    const label = hidden
+        ? 'Show Body and Pose controls'
+        : 'Hide Body and Pose controls'
+    const title = hidden ? 'Show controls' : 'Hide controls'
+
+    if (button.getAttribute('aria-expanded') !== expanded) {
+        button.setAttribute('aria-expanded', expanded)
+    }
+
+    if (button.getAttribute('aria-label') !== label) {
+        button.setAttribute('aria-label', label)
+    }
+
+    if (button.title !== title) {
+        button.title = title
+    }
+}
+
+function ensurePanelToggle() {
+    if (document.getElementById(PANEL_TOGGLE_ID) !== null) {
+        return
+    }
+
+    if (document.getElementById('app-control-panel') === null) {
+        return
+    }
+
+    const button = document.createElement('button')
+    button.id = PANEL_TOGGLE_ID
+    button.type = 'button'
+    button.textContent = 'Controls'
+
+    button.addEventListener('click', () => {
+        document.body.classList.toggle(PANEL_HIDDEN_CLASS)
+        updatePanelToggleState(button)
+        window.dispatchEvent(new Event('resize'))
+    })
+
+    updatePanelToggleState(button)
+    document.body.appendChild(button)
+}
+
+function addedNodeNeedsEnhancement(node: Node): boolean {
+    if (!(node instanceof HTMLElement)) {
+        return false
+    }
+
+    if (
+        node.id === 'app-control-panel' ||
+        node.matches(CONTROL_SELECTOR)
+    ) {
+        return true
+    }
+
+    return node.querySelector(CONTROL_SELECTOR) !== null
+}
+
 export function installMobileUI() {
     if (document.getElementById(STYLE_ID) === null) {
         const style = document.createElement('style')
@@ -188,10 +271,15 @@ export function installMobileUI() {
                 top: 0;
                 bottom: 0;
                 width: var(--app-panel-width);
+                min-width: var(--app-panel-width);
+                max-width: var(--app-panel-width);
                 z-index: 30;
                 overflow: hidden;
                 background: var(--tx-gray-100);
                 font-size: var(--app-control-font-size);
+                transform: translateX(0);
+                transition: transform 180ms ease;
+                will-change: transform;
             }
 
             #app-viewport {
@@ -203,6 +291,51 @@ export function installMobileUI() {
                 overflow: hidden;
                 background: #000;
                 touch-action: none;
+                transition: left 180ms ease, bottom 180ms ease;
+            }
+
+            body.${PANEL_HIDDEN_CLASS} #app-control-panel {
+                transform: translateX(-100%);
+            }
+
+            body.${PANEL_HIDDEN_CLASS} #app-viewport {
+                left: 0;
+            }
+
+            #app-panel-toggle {
+                position: absolute;
+                z-index: 60;
+                left: calc(var(--app-panel-width) + 14px);
+                top: max(14px, env(safe-area-inset-top));
+                height: 48px;
+                min-height: 48px;
+                padding: 6px 18px;
+                border: 0;
+                border-radius: 24px;
+                background: var(--tx-gray-400);
+                color: var(--tx-gray-900);
+                font: inherit;
+                font-size: 17px;
+                font-weight: 500;
+                line-height: 1;
+                cursor: pointer;
+                transition:
+                    left 180ms ease,
+                    bottom 180ms ease,
+                    background 120ms ease;
+                -webkit-tap-highlight-color: transparent;
+            }
+
+            #app-panel-toggle:hover {
+                background: var(--tx-gray-500);
+            }
+
+            #app-panel-toggle:active {
+                background: var(--tx-gray-300);
+            }
+
+            body.${PANEL_HIDDEN_CLASS} #app-panel-toggle {
+                left: max(14px, env(safe-area-inset-left));
             }
 
             #app-viewport tx-glview {
@@ -223,7 +356,7 @@ export function installMobileUI() {
                 box-sizing: border-box;
             }
 
-                        .pose-scroll-panel {
+            .pose-scroll-panel {
                 padding: var(--app-panel-padding) !important;
                 box-sizing: border-box;
             }
@@ -267,7 +400,6 @@ export function installMobileUI() {
 
             @media (max-width: 1180px) {
                 :root {
-                    --app-panel-width: 44vw;
                     --app-control-font-size: 17px;
                     --app-panel-padding: 20px;
                 }
@@ -305,8 +437,11 @@ export function installMobileUI() {
                     top: auto;
                     bottom: 0;
                     width: 100vw;
+                    min-width: 0;
+                    max-width: none;
                     height: var(--app-panel-height-mobile);
                     border-top: 1px solid var(--tx-gray-300);
+                    transform: translateY(0);
                 }
 
                 #app-viewport {
@@ -314,6 +449,26 @@ export function installMobileUI() {
                     right: 0;
                     top: 0;
                     bottom: var(--app-panel-height-mobile);
+                }
+
+                body.${PANEL_HIDDEN_CLASS} #app-control-panel {
+                    transform: translateY(100%);
+                }
+
+                body.${PANEL_HIDDEN_CLASS} #app-viewport {
+                    left: 0;
+                    bottom: 0;
+                }
+
+                #app-panel-toggle {
+                    left: max(14px, env(safe-area-inset-left));
+                    top: auto;
+                    bottom: calc(var(--app-panel-height-mobile) + 14px);
+                }
+
+                body.${PANEL_HIDDEN_CLASS} #app-panel-toggle {
+                    left: max(14px, env(safe-area-inset-left));
+                    bottom: max(14px, env(safe-area-inset-bottom));
                 }
 
                 .mannequin-control-row {
@@ -372,6 +527,14 @@ export function installMobileUI() {
                     transform: scale(0.92);
                     transform-origin: top right;
                 }
+
+                #app-panel-toggle {
+                    height: 44px;
+                    min-height: 44px;
+                    padding: 5px 15px;
+                    border-radius: 22px;
+                    font-size: 16px;
+                }
             }
 
             @media (pointer: coarse) {
@@ -389,12 +552,32 @@ export function installMobileUI() {
                     user-select: text;
                 }
             }
+
+            @media (prefers-reduced-motion: reduce) {
+                #app-control-panel,
+                #app-viewport,
+                #app-panel-toggle {
+                    transition: none;
+                }
+            }
         `
         document.head.appendChild(style)
     }
 
-    const observer = new MutationObserver(() => {
-        window.requestAnimationFrame(enhanceControls)
+    const observer = new MutationObserver((records) => {
+        for (const record of records) {
+            for (let i = 0; i < record.addedNodes.length; ++i) {
+                const node = record.addedNodes.item(i)
+
+                if (
+                    node !== null &&
+                    addedNodeNeedsEnhancement(node)
+                ) {
+                    scheduleEnhanceControls()
+                    return
+                }
+            }
+        }
     })
 
     observer.observe(document.body, {
@@ -402,6 +585,14 @@ export function installMobileUI() {
         subtree: true,
     })
 
-    window.addEventListener('resize', enhanceControls)
-    window.requestAnimationFrame(enhanceControls)
+    window.addEventListener('resize', scheduleEnhanceControls)
+
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener(
+            'resize',
+            scheduleEnhanceControls,
+        )
+    }
+
+    scheduleEnhanceControls()
 }

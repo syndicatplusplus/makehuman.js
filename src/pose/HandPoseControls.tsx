@@ -9,7 +9,10 @@ import { Button } from 'toad.js/viewkit/Button'
 import { Select } from 'toad.js/viewkit/Select'
 import { Slider } from 'toad.js/viewkit/Slider'
 import { TextField } from 'toad.js/viewkit/TextField'
-import { POSE_CHANGED_EVENT } from './PoseEvents'
+import {
+    announcePoseChanged,
+    POSE_CHANGED_EVENT,
+} from './PoseEvents'
 
 type HandSide = 'L' | 'R'
 type FingerKey = 'thumb' | 'index' | 'middle' | 'ring' | 'pinky'
@@ -46,8 +49,7 @@ const CURL_MAX: Record<FingerKey, [number, number, number]> = {
     pinky: [75, 105, 100],
 }
 
-// Spread is applied only at the first phalanx. The values fan the fingers
-// around the middle finger, with the hand side mirrored automatically.
+// Spread is applied only at the first phalanx.
 const SPREAD_WEIGHT: Partial<Record<FingerKey, number>> = {
     index: -1.0,
     middle: -0.25,
@@ -80,6 +82,14 @@ function refreshPose(app: Application) {
     }
 
     app.glview?.invalidate()
+}
+
+function fingerBoneName(
+    side: HandSide,
+    finger: FingerKey,
+    joint: number,
+): string {
+    return `finger${FINGER_NUMBER[finger]}-${joint}.${side}`
 }
 
 function HandSlider(props: {
@@ -125,8 +135,6 @@ function focusHand(
         transform,
     )
 
-    // Preserve the current viewing angle, but move the selected wrist to the
-    // middle of the screen and bring the camera much closer.
     const camera = mat4.clone(app.glview.ctx.camera)
     camera[12] = 0
     camera[13] = 0
@@ -177,40 +185,85 @@ export function HandPoseControls(props: {
 
     let syncing = false
 
-    const applyHand = (side: HandSide) => {
+    const finishHandChange = () => {
+        refreshPose(app)
+        announcePoseChanged()
+    }
+
+    const applyFingerCurl = (
+        side: HandSide,
+        finger: FingerKey,
+    ) => {
+        const hand = state[side]
+        const curl = hand[finger] / 100
+        const curlMax = CURL_MAX[finger]
+
+        for (let joint = 1; joint <= 3; ++joint) {
+            const boneName = fingerBoneName(side, finger, joint)
+            if (!app.skeleton.hasBone(boneName)) {
+                continue
+            }
+
+            const bone = app.skeleton.getBone(boneName)
+            const existing = matrix2euler(bone.matUserPoseRelative)
+
+            bone.matUserPoseGlobal = undefined
+            bone.matUserPoseRelative = euler2matrix(
+                deg2rad(curlMax[joint - 1] * curl),
+                existing.y,
+                existing.z,
+            )
+        }
+    }
+
+    const applyAllCurls = (side: HandSide) => {
+        for (const finger of Object.keys(fingerModels) as FingerKey[]) {
+            applyFingerCurl(side, finger)
+        }
+    }
+
+    const applySpread = (side: HandSide) => {
         const hand = state[side]
         const sideSign = side === 'L' ? 1 : -1
 
-        for (const finger of Object.keys(fingerModels) as FingerKey[]) {
-            const fingerNumber = FINGER_NUMBER[finger]
-            const curl = hand[finger] / 100
-            const curlMax = CURL_MAX[finger]
-            const spreadWeight = SPREAD_WEIGHT[finger] ?? 0
+        for (const finger of Object.keys(SPREAD_WEIGHT) as FingerKey[]) {
+            const weight = SPREAD_WEIGHT[finger] ?? 0
+            if (weight === 0) {
+                continue
+            }
 
+            const boneName = fingerBoneName(side, finger, 1)
+            if (!app.skeleton.hasBone(boneName)) {
+                continue
+            }
+
+            const bone = app.skeleton.getBone(boneName)
+            const existing = matrix2euler(bone.matUserPoseRelative)
+            const spreadDegrees =
+                hand.spread * weight * sideSign
+
+            bone.matUserPoseGlobal = undefined
+            bone.matUserPoseRelative = euler2matrix(
+                existing.x,
+                existing.y,
+                deg2rad(spreadDegrees),
+            )
+        }
+    }
+
+    const resetHandBones = (side: HandSide) => {
+        for (const finger of Object.keys(fingerModels) as FingerKey[]) {
             for (let joint = 1; joint <= 3; ++joint) {
-                const boneName = `finger${fingerNumber}-${joint}.${side}`
+                const boneName = fingerBoneName(side, finger, joint)
                 if (!app.skeleton.hasBone(boneName)) {
                     continue
                 }
 
                 const bone = app.skeleton.getBone(boneName)
                 bone.matUserPoseGlobal = undefined
-
-                const curlDegrees = curlMax[joint - 1] * curl
-                const spreadDegrees =
-                    joint === 1
-                        ? hand.spread * spreadWeight * sideSign
-                        : 0
-
-                bone.matUserPoseRelative = euler2matrix(
-                    deg2rad(curlDegrees),
-                    0,
-                    deg2rad(spreadDegrees),
-                )
+                mat4.identity(bone.matUserPoseRelative)
             }
         }
-
-        refreshPose(app)
     }
 
     const syncSideFromSkeleton = (side: HandSide) => {
@@ -218,11 +271,10 @@ export function HandPoseControls(props: {
         const sideSign = side === 'L' ? 1 : -1
 
         for (const finger of Object.keys(fingerModels) as FingerKey[]) {
-            const fingerNumber = FINGER_NUMBER[finger]
             const ratios: number[] = []
 
             for (let joint = 1; joint <= 3; ++joint) {
-                const boneName = `finger${fingerNumber}-${joint}.${side}`
+                const boneName = fingerBoneName(side, finger, joint)
                 if (!app.skeleton.hasBone(boneName)) {
                     continue
                 }
@@ -232,14 +284,18 @@ export function HandPoseControls(props: {
                 const maxDegrees = CURL_MAX[finger][joint - 1]
 
                 if (maxDegrees !== 0) {
-                    ratios.push(rad2deg(rotation.x) / maxDegrees)
+                    ratios.push(
+                        rad2deg(rotation.x) / maxDegrees,
+                    )
                 }
             }
 
             const ratio =
                 ratios.length > 0
-                    ? ratios.reduce((sum, value) => sum + value, 0) /
-                        ratios.length
+                    ? ratios.reduce(
+                        (sum, value) => sum + value,
+                        0,
+                    ) / ratios.length
                     : 0
 
             hand[finger] = clamp(ratio * 100, 0, 100)
@@ -253,7 +309,7 @@ export function HandPoseControls(props: {
                 continue
             }
 
-            const boneName = `finger${FINGER_NUMBER[finger]}-1.${side}`
+            const boneName = fingerBoneName(side, finger, 1)
             if (!app.skeleton.hasBone(boneName)) {
                 continue
             }
@@ -270,19 +326,23 @@ export function HandPoseControls(props: {
         hand.spread =
             spreadSamples.length > 0
                 ? clamp(
-                    spreadSamples.reduce((sum, value) => sum + value, 0) /
-                        spreadSamples.length,
+                    spreadSamples.reduce(
+                        (sum, value) => sum + value,
+                        0,
+                    ) / spreadSamples.length,
                     -30,
                     30,
                 )
                 : 0
 
         hand.all =
-            (hand.thumb +
+            (
+                hand.thumb +
                 hand.index +
                 hand.middle +
                 hand.ring +
-                hand.pinky) / 5
+                hand.pinky
+            ) / 5
     }
 
     const loadSide = (side: HandSide) => {
@@ -299,14 +359,22 @@ export function HandPoseControls(props: {
         syncing = false
     }
 
+    const syncControlsFromSkeleton = () => {
+        syncSideFromSkeleton('L')
+        syncSideFromSkeleton('R')
+        loadSide(sideModel.value)
+    }
+
     sideModel.signal.add(() => {
+        syncSideFromSkeleton(sideModel.value)
         loadSide(sideModel.value)
     })
 
     allModel.signal.add(() => {
         if (syncing) return
 
-        const hand = state[sideModel.value]
+        const side = sideModel.value
+        const hand = state[side]
         hand.all = allModel.value
 
         syncing = true
@@ -316,47 +384,69 @@ export function HandPoseControls(props: {
         }
         syncing = false
 
-        applyHand(sideModel.value)
+        applyAllCurls(side)
+        finishHandChange()
     })
 
     for (const finger of Object.keys(fingerModels) as FingerKey[]) {
         fingerModels[finger].signal.add(() => {
             if (syncing) return
 
-            const hand = state[sideModel.value]
+            const side = sideModel.value
+            const hand = state[side]
             hand[finger] = fingerModels[finger].value
 
-            // Individual adjustment means the master value no longer represents
-            // the whole hand exactly, so leave it as a visual average.
             hand.all =
-                (hand.thumb +
+                (
+                    hand.thumb +
                     hand.index +
                     hand.middle +
                     hand.ring +
-                    hand.pinky) / 5
+                    hand.pinky
+                ) / 5
 
             syncing = true
             allModel.value = hand.all
             syncing = false
 
-            applyHand(sideModel.value)
+            /*
+             * Only this one finger's curl axis is changed. Other fingers,
+             * spread, and non-curl gizmo fine-tuning stay intact.
+             */
+            applyFingerCurl(side, finger)
+            finishHandChange()
         })
     }
 
     spreadModel.signal.add(() => {
         if (syncing) return
-        state[sideModel.value].spread = spreadModel.value
-        applyHand(sideModel.value)
+
+        const side = sideModel.value
+        state[side].spread = spreadModel.value
+
+        applySpread(side)
+        finishHandChange()
     })
 
     const relaxHand = () => {
-        state[sideModel.value] = freshState()
-        loadSide(sideModel.value)
-        applyHand(sideModel.value)
+        const side = sideModel.value
+
+        resetHandBones(side)
+        state[side] = freshState()
+        loadSide(side)
+        finishHandChange()
     }
 
     const makeFist = () => {
-        const hand = state[sideModel.value]
+        const side = sideModel.value
+
+        /*
+         * Make fist is intentionally canonical. Clear manual phalanx twists,
+         * then apply the coordinated fist recipe.
+         */
+        resetHandBones(side)
+
+        const hand = state[side]
         hand.all = 100
         hand.thumb = 100
         hand.index = 100
@@ -364,19 +454,16 @@ export function HandPoseControls(props: {
         hand.ring = 100
         hand.pinky = 100
         hand.spread = 0
-        loadSide(sideModel.value)
-        applyHand(sideModel.value)
+
+        loadSide(side)
+        applyAllCurls(side)
+        applySpread(side)
+        finishHandChange()
     }
 
     const bodyView = () => {
         app.glview.ctx.camera = app.bodyCamera()
         app.glview.invalidate()
-    }
-
-    const syncControlsFromSkeleton = () => {
-        syncSideFromSkeleton('L')
-        syncSideFromSkeleton('R')
-        loadSide(sideModel.value)
     }
 
     window.addEventListener(
@@ -395,6 +482,7 @@ export function HandPoseControls(props: {
             }}
         >
             <h3 style={{ margin: '0 0 8px 0' }}>Hand posing</h3>
+
             <p
                 style={{
                     marginTop: 0,
@@ -402,8 +490,8 @@ export function HandPoseControls(props: {
                     lineHeight: '1.45',
                 }}
             >
-                Focus on one hand, then curl the whole hand or adjust each digit.
-                Spread fans the four fingers apart.
+                Focus on one hand, then curl the whole hand or adjust each
+                digit. Fine-tune individual phalanges with the gizmo.
             </p>
 
             <div style={{ marginBottom: '14px' }}>
@@ -425,6 +513,7 @@ export function HandPoseControls(props: {
                 >
                     Focus hand
                 </Button>
+
                 <Button action={bodyView}>Body view</Button>
                 <Button action={relaxHand}>Relax hand</Button>
                 <Button action={makeFist}>Make fist</Button>
@@ -445,8 +534,9 @@ export function HandPoseControls(props: {
                     lineHeight: '1.4',
                 }}
             >
-                Curl uses the three finger joints together, so one slider behaves
-                more like a real finger than rotating each phalanx separately.
+                Gizmo edits update these sliders. An individual curl slider
+                changes only that finger; All curl, Relax hand, and Make fist
+                intentionally affect the whole hand.
             </p>
         </div>
     )

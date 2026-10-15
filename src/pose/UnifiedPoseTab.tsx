@@ -20,6 +20,10 @@ import { TextField } from 'toad.js/viewkit/TextField'
 import { HandPoseControls } from './HandPoseControls'
 import { POSE_BONES } from './PoseBones'
 import { PoseFileControls } from './PoseFileControls'
+import {
+    announcePoseChanged,
+    POSE_CHANGED_EVENT,
+} from './PoseEvents'
 import { PoseSelectMode } from './PoseSelectMode'
 import {
     XBotHandPoseControls,
@@ -30,6 +34,14 @@ import { XBotPoseFileControls } from './XBotPoseFileControls'
 import { XBotPoseSelectMode } from './XBotPoseSelectMode'
 
 type PoseMode = 'human' | 'xbot'
+
+function isHumanFingerBone(name: string): boolean {
+    return /^finger[1-5]-[1-3]\.[LR]$/.test(name)
+}
+
+function isXBotFingerBone(name: string): boolean {
+    return /^mixamorig:(Left|Right)Hand(Thumb|Index|Middle|Ring|Pinky)[123]$/.test(name)
+}
 
 function roundedDegrees(radians: number): number {
     return Math.round(rad2deg(radians) * 10) / 10
@@ -164,6 +176,12 @@ export function UnifiedPoseTab(props: {
         }
 
         commitHumanControlsToBone(humanControlsBone)
+
+        // Keep the coarse hand sliders synchronized when an individual
+        // MakeHuman phalanx is adjusted with the gizmo or XYZ controls.
+        if (isHumanFingerBone(humanControlsBone)) {
+            announcePoseChanged()
+        }
     }
 
     const resetHumanSelectedBone = () => {
@@ -179,7 +197,22 @@ export function UnifiedPoseTab(props: {
 
         loadHumanSelectedBone()
         refreshHumanPose(app)
+
+        if (isHumanFingerBone(selectedBone)) {
+            announcePoseChanged()
+        }
     }
+
+    const syncHumanBoneControlsFromHand = () => {
+        if (isHumanFingerBone(humanBoneModel.value)) {
+            loadHumanSelectedBone()
+        }
+    }
+
+    window.addEventListener(
+        POSE_CHANGED_EVENT,
+        syncHumanBoneControlsFromHand,
+    )
 
     humanBoneModel.signal.add(() => {
         commitHumanControlsToBone(humanControlsBone)
@@ -264,10 +297,25 @@ export function UnifiedPoseTab(props: {
         }
 
         commitXBotControlsToBone(xbotControlsBone)
+
+        // Finger gizmo / XYZ edits should immediately update the coarse
+        // hand-curl controls too. Body bones do not need this extra work.
+        if (isXBotFingerBone(xbotControlsBone)) {
+            window.dispatchEvent(new Event(XBOT_HAND_SYNC_EVENT))
+        }
     }
 
-    const syncAllXBotPoseControls = () => {
+    const syncXBotBoneControlsFromHand = () => {
         loadXBotSelectedBone()
+        app.glview?.invalidate()
+    }
+
+    window.addEventListener(
+        XBOT_HAND_SYNC_EVENT,
+        syncXBotBoneControlsFromHand,
+    )
+
+    const syncAllXBotPoseControls = () => {
         window.dispatchEvent(new Event(XBOT_HAND_SYNC_EVENT))
         app.glview?.invalidate()
     }

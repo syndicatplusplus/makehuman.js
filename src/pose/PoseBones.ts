@@ -5,6 +5,51 @@ export interface PoseBoneOption {
     hitRadius: number
 }
 
+type HandSide = 'L' | 'R'
+type FingerName = 'thumb' | 'index' | 'middle' | 'ring' | 'pinky'
+
+const FINGERS: readonly FingerName[] = [
+    'thumb',
+    'index',
+    'middle',
+    'ring',
+    'pinky',
+]
+
+const JOINT_LABELS = [
+    'base',
+    'middle',
+    'tip',
+] as const
+
+function fingerPoseOptions(
+    side: HandSide,
+    sideLabel: string,
+): PoseBoneOption[] {
+    const result: PoseBoneOption[] = []
+
+    for (let fingerIndex = 0; fingerIndex < FINGERS.length; ++fingerIndex) {
+        const fingerNumber = fingerIndex + 1
+        const finger = FINGERS[fingerIndex]
+
+        for (let joint = 1; joint <= 3; ++joint) {
+            const boneName =
+                `finger${fingerNumber}-${joint}.${side}`
+
+            result.push({
+                value: boneName,
+                label:
+                    `${sideLabel} ${finger} ` +
+                    JOINT_LABELS[joint - 1],
+                pickBones: [boneName],
+                hitRadius: finger === 'thumb' ? 24 : 20,
+            })
+        }
+    }
+
+    return result
+}
+
 export const POSE_BONE_OPTIONS: readonly PoseBoneOption[] = [
     { value: 'none', label: 'None', pickBones: [], hitRadius: 0 },
 
@@ -19,10 +64,14 @@ export const POSE_BONE_OPTIONS: readonly PoseBoneOption[] = [
     { value: 'lowerarm01.L', label: 'Left forearm', pickBones: ['lowerarm01.L', 'lowerarm02.L'], hitRadius: 32 },
     { value: 'wrist.L', label: 'Left wrist', pickBones: ['wrist.L'], hitRadius: 30 },
 
+    ...fingerPoseOptions('L', 'Left'),
+
     { value: 'clavicle.R', label: 'Right shoulder', pickBones: ['clavicle.R', 'shoulder01.R'], hitRadius: 38 },
     { value: 'upperarm01.R', label: 'Right upper arm', pickBones: ['upperarm01.R', 'upperarm02.R'], hitRadius: 34 },
     { value: 'lowerarm01.R', label: 'Right forearm', pickBones: ['lowerarm01.R', 'lowerarm02.R'], hitRadius: 32 },
     { value: 'wrist.R', label: 'Right wrist', pickBones: ['wrist.R'], hitRadius: 30 },
+
+    ...fingerPoseOptions('R', 'Right'),
 
     { value: 'upperleg01.L', label: 'Left thigh', pickBones: ['upperleg01.L', 'upperleg02.L'], hitRadius: 42 },
     { value: 'lowerleg01.L', label: 'Left shin', pickBones: ['lowerleg01.L', 'lowerleg02.L'], hitRadius: 38 },

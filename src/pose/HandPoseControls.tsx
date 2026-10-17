@@ -157,6 +157,7 @@ function focusHand(
 export function HandPoseControls(props: {
     app: Application
     selectBone: (boneName: string) => void
+    afterPoseChanged?: () => void
 }) {
     const app = props.app
 
@@ -188,6 +189,7 @@ export function HandPoseControls(props: {
     const finishHandChange = () => {
         refreshPose(app)
         announcePoseChanged()
+        props.afterPoseChanged?.()
     }
 
     const applyFingerCurl = (

@@ -152,6 +152,7 @@ export function XBotHandPoseControls(props: {
     app: Application
     renderer: RenderXBot
     selectBone: (boneName: string) => void
+    afterPoseChanged?: () => void
 }) {
     const { app, renderer } = props
 
@@ -188,6 +189,7 @@ export function XBotHandPoseControls(props: {
          */
         window.dispatchEvent(new Event(XBOT_HAND_SYNC_EVENT))
         app.glview.invalidate()
+        props.afterPoseChanged?.()
     }
 
     const applyFingerCurl = (

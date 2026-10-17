@@ -6,6 +6,7 @@ import { mat4, vec3, vec4 } from 'gl-matrix'
 import { NumberModel } from 'toad.js/appkit/NumberModel'
 import { OptionModel } from 'toad.js/appkit/OptionModel'
 import { POSE_BONE_OPTIONS, getPoseBoneOption } from './PoseBones'
+import { beginPoseHistoryGesture, endPoseHistoryGesture } from './PoseHistory'
 
 interface ScreenPoint {
     x: number
@@ -196,6 +197,10 @@ export class PoseSelectMode extends InputHandler {
     }
 
     override destructor(): void {
+        if (this.gizmoDrag !== undefined) {
+            endPoseHistoryGesture('human')
+        }
+
         this.pickCandidates.clear()
         this.gizmoDrag = undefined
         this.overlayGroup.remove()
@@ -290,6 +295,7 @@ export class PoseSelectMode extends InputHandler {
             const placement = this.getGizmoPlacement()
             if (placement !== undefined) {
                 const rect = this.app.glview.canvas.getBoundingClientRect()
+                beginPoseHistoryGesture('human')
                 this.gizmoDrag = {
                     axis,
                     lastX: ev.clientX - rect.left,
@@ -475,6 +481,7 @@ export class PoseSelectMode extends InputHandler {
             return
         }
 
+        endPoseHistoryGesture('human')
         this.gizmoDrag = undefined
 
         if (this.app.glview.canvas.hasPointerCapture(ev.pointerId)) {
@@ -505,6 +512,7 @@ export class PoseSelectMode extends InputHandler {
         }
 
         if (this.gizmoDrag !== undefined) {
+            endPoseHistoryGesture('human')
             this.gizmoDrag = undefined
             this.hoverAxis = undefined
             this.app.glview.canvas.style.cursor = ''
@@ -519,6 +527,10 @@ export class PoseSelectMode extends InputHandler {
     }
 
     private clearSelection(): void {
+        if (this.gizmoDrag !== undefined) {
+            endPoseHistoryGesture('human')
+        }
+
         this.boneModel.value = 'none'
         this.hoverValue = undefined
         this.hoverAxis = undefined

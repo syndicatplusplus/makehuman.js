@@ -2,6 +2,14 @@ import { Application } from 'Application'
 import { mat4, vec4 } from 'gl-matrix'
 import { Button } from 'toad.js/viewkit/Button'
 import { POINTER_DEBUG_TOGGLE_EVENT } from 'gl/input/BasicMode'
+import {
+    POSE_HISTORY_CHANGED_EVENT,
+    canRedoActivePose,
+    canUndoActivePose,
+    getActivePoseHistoryMode,
+    redoActivePose,
+    undoActivePose,
+} from 'pose/PoseHistory'
 
 const PAN_STEP = 0.75
 const ZOOM_IN_FACTOR = 0.82
@@ -70,6 +78,54 @@ export function ViewportControls(props: { app: Application }) {
     let expanded = false
     let diagnosticsVisible = false
     let diagnosticsButton: HTMLElement
+    let undoButton: HTMLElement
+    let redoButton: HTMLElement
+    let historyControls: HTMLDivElement
+
+    const syncHistoryControls = () => {
+        const active = getActivePoseHistoryMode() !== undefined
+        const canUndo = canUndoActivePose()
+        const canRedo = canRedoActivePose()
+
+        historyControls.style.display = active ? 'flex' : 'none'
+
+        undoButton.style.opacity = canUndo ? '1' : '0.42'
+        redoButton.style.opacity = canRedo ? '1' : '0.42'
+        undoButton.setAttribute('aria-disabled', canUndo ? 'false' : 'true')
+        redoButton.setAttribute('aria-disabled', canRedo ? 'false' : 'true')
+    }
+
+    undoButton = (
+        <Button action={() => undoActivePose()}>
+            Undo
+        </Button>
+    ) as HTMLElement
+
+    redoButton = (
+        <Button action={() => redoActivePose()}>
+            Redo
+        </Button>
+    ) as HTMLElement
+
+    historyControls = (
+        <div
+            class="pose-history-controls"
+            style={{
+                display: 'none',
+                gap: '8px',
+                pointerEvents: 'auto',
+            }}
+        >
+            {undoButton}
+            {redoButton}
+        </div>
+    ) as HTMLDivElement
+
+    window.addEventListener(
+        POSE_HISTORY_CHANGED_EVENT,
+        syncHistoryControls,
+    )
+    requestAnimationFrame(syncHistoryControls)
 
     const toggleDiagnostics = () => {
         diagnosticsVisible = !diagnosticsVisible
@@ -171,7 +227,15 @@ export function ViewportControls(props: { app: Application }) {
                 userSelect: 'none',
             }}
         >
-            <div style={{ pointerEvents: 'auto' }}>
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    pointerEvents: 'auto',
+                }}
+            >
+                {historyControls}
                 <Button action={toggle}>View</Button>
             </div>
 

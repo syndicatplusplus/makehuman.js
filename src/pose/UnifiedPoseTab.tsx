@@ -26,6 +26,12 @@ import {
 } from './PoseEvents'
 import { PoseSelectMode } from './PoseSelectMode'
 import {
+    commitPoseHistory,
+    queuePoseHistoryRecord,
+    registerPoseHistoryAdapter,
+    setActivePoseHistoryMode,
+} from './PoseHistory'
+import {
     XBotHandPoseControls,
     XBOT_HAND_SYNC_EVENT,
 } from './XBotHandPoseControls'
@@ -182,6 +188,8 @@ export function UnifiedPoseTab(props: {
         if (isHumanFingerBone(humanControlsBone)) {
             announcePoseChanged()
         }
+
+        queuePoseHistoryRecord('human')
     }
 
     const resetHumanSelectedBone = () => {
@@ -201,6 +209,8 @@ export function UnifiedPoseTab(props: {
         if (isHumanFingerBone(selectedBone)) {
             announcePoseChanged()
         }
+
+        commitPoseHistory('human')
     }
 
     const syncHumanBoneControlsFromHand = () => {
@@ -303,6 +313,8 @@ export function UnifiedPoseTab(props: {
         if (isXBotFingerBone(xbotControlsBone)) {
             window.dispatchEvent(new Event(XBOT_HAND_SYNC_EVENT))
         }
+
+        queuePoseHistoryRecord('xbot')
     }
 
     const syncXBotBoneControlsFromHand = () => {
@@ -328,11 +340,13 @@ export function UnifiedPoseTab(props: {
 
         xbotRenderer.resetBone(selectedBone)
         syncAllXBotPoseControls()
+        commitPoseHistory('xbot')
     }
 
     const resetXBotWholePose = () => {
         xbotRenderer.resetPose()
         syncAllXBotPoseControls()
+        commitPoseHistory('xbot')
     }
 
     xbotBoneModel.signal.add(() => {
@@ -345,6 +359,30 @@ export function UnifiedPoseTab(props: {
     xbotZModel.signal.add(applyXBotSelectedBone)
 
     loadXBotSelectedBone()
+
+    /*
+     * Pose undo / redo. Each history entry is a complete pose snapshot, so an
+     * undo remains correct even when several bones were changed by a hand
+     * slider or a loaded pose file.
+     */
+    registerPoseHistoryAdapter('human', {
+        capture: () => app.skeleton.toMHP(),
+        restore: (snapshot) => {
+            app.skeleton.fromMHP(snapshot)
+            refreshHumanPose(app)
+            announcePoseChanged()
+            loadHumanSelectedBone()
+        },
+    })
+
+    registerPoseHistoryAdapter('xbot', {
+        capture: () => JSON.stringify(xbotRenderer.exportPose()),
+        restore: (snapshot) => {
+            xbotRenderer.importPose(JSON.parse(snapshot))
+            syncAllXBotPoseControls()
+            loadXBotSelectedBone()
+        },
+    })
 
     /*
      * One Pose tab, two posing systems.
@@ -395,6 +433,7 @@ export function UnifiedPoseTab(props: {
 
         app.glview.popInputHandler()
         activeMode = undefined
+        setActivePoseHistoryMode(undefined)
     }
 
     const activatePoseMode = () => {
@@ -410,6 +449,7 @@ export function UnifiedPoseTab(props: {
                     ? xbotRenderer
                     : humanRenderer,
             )
+            setActivePoseHistoryMode(nextMode)
             app.glview.invalidate()
             return
         }
@@ -448,6 +488,7 @@ export function UnifiedPoseTab(props: {
         }
 
         activeMode = nextMode
+        setActivePoseHistoryMode(nextMode)
         app.glview.invalidate()
     }
 
@@ -524,7 +565,10 @@ export function UnifiedPoseTab(props: {
 
                 <PoseFileControls
                     app={app}
-                    afterPoseChanged={loadHumanSelectedBone}
+                    afterPoseChanged={() => {
+                        loadHumanSelectedBone()
+                        commitPoseHistory('human')
+                    }}
                 />
 
                 <div style={{ margin: '20px 0 26px 0' }}>
@@ -571,6 +615,9 @@ export function UnifiedPoseTab(props: {
                     selectBone={(boneName) => {
                         humanBoneModel.value = boneName
                     }}
+                    afterPoseChanged={() => {
+                        queuePoseHistoryRecord('human')
+                    }}
                 />
             </div>
 
@@ -601,7 +648,10 @@ export function UnifiedPoseTab(props: {
                     beforeSave={() => {
                         commitXBotControlsToBone(xbotControlsBone)
                     }}
-                    afterPoseChanged={syncAllXBotPoseControls}
+                    afterPoseChanged={() => {
+                        syncAllXBotPoseControls()
+                        commitPoseHistory('xbot')
+                    }}
                 />
 
                 <div style={{ margin: '20px 0 26px 0' }}>
@@ -652,6 +702,9 @@ export function UnifiedPoseTab(props: {
                             renderer={xbotRenderer}
                             selectBone={(boneName) => {
                                 xbotBoneModel.value = boneName
+                            }}
+                            afterPoseChanged={() => {
+                                queuePoseHistoryRecord('xbot')
                             }}
                         />
                     </div>

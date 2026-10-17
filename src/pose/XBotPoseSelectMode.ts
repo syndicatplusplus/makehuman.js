@@ -10,6 +10,7 @@ import {
     XBOT_POSE_BONE_OPTIONS,
     getXBotPoseBoneOption,
 } from './XBotPoseBones'
+import { beginPoseHistoryGesture, endPoseHistoryGesture } from './PoseHistory'
 
 interface ScreenPoint {
     x: number
@@ -218,6 +219,10 @@ export class XBotPoseSelectMode extends InputHandler {
     }
 
     override destructor(): void {
+        if (this.gizmoDrag !== undefined) {
+            endPoseHistoryGesture('xbot')
+        }
+
         this.cancelPendingGizmoFrame()
         this.pickCandidates.clear()
         this.gizmoDrag = undefined
@@ -294,6 +299,7 @@ export class XBotPoseSelectMode extends InputHandler {
             const placement = this.getGizmoPlacement()
             if (placement !== undefined) {
                 const rect = this.app.glview.canvas.getBoundingClientRect()
+                beginPoseHistoryGesture('xbot')
                 this.gizmoDrag = {
                     axis,
                     lastX: ev.clientX - rect.left,
@@ -450,6 +456,7 @@ export class XBotPoseSelectMode extends InputHandler {
          */
         this.flushPendingGizmoDrag()
         this.cancelPendingGizmoFrame()
+        endPoseHistoryGesture('xbot')
         this.gizmoDrag = undefined
 
         if (this.app.glview.canvas.hasPointerCapture(ev.pointerId)) {
@@ -481,6 +488,7 @@ export class XBotPoseSelectMode extends InputHandler {
 
         if (this.gizmoDrag !== undefined) {
             this.cancelPendingGizmoFrame()
+            endPoseHistoryGesture('xbot')
             this.gizmoDrag = undefined
             this.hoverAxis = undefined
             this.app.glview.canvas.style.cursor = ''
@@ -563,6 +571,11 @@ export class XBotPoseSelectMode extends InputHandler {
     }
 
     private clearSelection(): void {
+        if (this.gizmoDrag !== undefined) {
+            this.flushPendingGizmoDrag()
+            endPoseHistoryGesture('xbot')
+        }
+
         this.cancelPendingGizmoFrame()
         this.boneModel.value = 'none'
         this.hoverValue = undefined

@@ -61,6 +61,9 @@ function enhanceText(host: HTMLElement, touch: boolean) {
     input.style.fontSize = touch ? '17px' : '15px'
     input.style.lineHeight = touch ? '24px' : '20px'
     input.style.padding = touch ? '8px 10px' : '5px 8px'
+    input.style.userSelect = 'text'
+    input.style.setProperty('-webkit-user-select', 'text')
+    input.style.setProperty('-webkit-touch-callout', 'default')
 }
 
 function enhanceSelectPopup(host: HTMLElement, touch: boolean) {
@@ -263,6 +266,22 @@ export function installMobileUI() {
                 overflow: hidden;
                 overscroll-behavior: none;
                 -webkit-text-size-adjust: 100%;
+            }
+
+            /*
+             * NYANPOSER is an interactive tool rather than a document. Prevent
+             * finger and Apple Pencil gestures from accidentally selecting UI
+             * labels/help text or opening the iOS text-selection callout.
+             *
+             * Actual tx-text input fields are explicitly re-enabled in
+             * enhanceText() so their values remain editable/selectable.
+             */
+            #app-control-panel,
+            #app-viewport,
+            #app-panel-toggle {
+                -webkit-user-select: none;
+                user-select: none;
+                -webkit-touch-callout: none;
             }
 
             #app-control-panel {
@@ -534,22 +553,6 @@ export function installMobileUI() {
                     padding: 5px 15px;
                     border-radius: 22px;
                     font-size: 16px;
-                }
-            }
-
-            @media (pointer: coarse) {
-                #app-control-panel {
-                    -webkit-user-select: none;
-                    user-select: none;
-                }
-
-                #app-control-panel p,
-                #app-control-panel h2,
-                #app-control-panel h3,
-                #app-control-panel strong,
-                #app-control-panel span {
-                    -webkit-user-select: text;
-                    user-select: text;
                 }
             }
 

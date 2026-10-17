@@ -42,8 +42,9 @@ interface GizmoRing {
     label: ScreenPoint
 }
 
-interface TouchPickCandidate {
+interface PickCandidate {
     pointerId: number
+    pointerType: string
     startX: number
     startY: number
     hit?: PickResult
@@ -62,7 +63,7 @@ const GIZMO_OFFSET = 118
 const GIZMO_EDGE_MARGIN = 82
 const GIZMO_PICK_DISTANCE = 8
 const TOUCH_GIZMO_PICK_DISTANCE = 18
-const TOUCH_TAP_MOVE_THRESHOLD = 12
+const DIRECT_TAP_MOVE_THRESHOLD = 12
 const GIZMO_SEGMENTS = 64
 const GIZMO_DEGREES_PER_PIXEL = 0.75
 
@@ -169,7 +170,7 @@ export class XBotPoseSelectMode extends InputHandler {
     private hoverValue?: string
     private hoverAxis?: GizmoAxis
     private gizmoDrag?: GizmoDrag
-    private touchPicks = new Map<number, TouchPickCandidate>()
+    private pickCandidates = new Map<number, PickCandidate>()
 
     /*
      * Pointer events can arrive faster than the display can paint, especially
@@ -213,12 +214,12 @@ export class XBotPoseSelectMode extends InputHandler {
     }
 
     override info(): string {
-        return 'X Bot Pose: tap/click body parts to select; drag X/Y/Z rings to rotate'
+        return 'X Bot Pose: tap/click body parts to select; drag X/Y/Z rings to rotate; Pencil drag to orbit'
     }
 
     override destructor(): void {
         this.cancelPendingGizmoFrame()
-        this.touchPicks.clear()
+        this.pickCandidates.clear()
         this.gizmoDrag = undefined
         this.overlayGroup.remove()
         this.app.glview.canvas.style.cursor = ''
@@ -263,6 +264,26 @@ export class XBotPoseSelectMode extends InputHandler {
         return center
     }
 
+    private markMultipleTouchesMoved(): void {
+        let touchCount = 0
+
+        for (const candidate of this.pickCandidates.values()) {
+            if (candidate.pointerType === 'touch') {
+                ++touchCount
+            }
+        }
+
+        if (touchCount <= 1) {
+            return
+        }
+
+        for (const candidate of this.pickCandidates.values()) {
+            if (candidate.pointerType === 'touch') {
+                candidate.moved = true
+            }
+        }
+    }
+
     override pointerdown(ev: PointerEvent): void {
         if (ev.button !== MouseButton.LEFT) {
             return
@@ -289,19 +310,24 @@ export class XBotPoseSelectMode extends InputHandler {
             }
         }
 
-        if (ev.pointerType === 'touch') {
-            this.touchPicks.set(ev.pointerId, {
+        // Finger and Pencil taps select, while their drags are reserved for
+        // viewport navigation. Delay selection until pointer-up so a Pencil
+        // can naturally become an orbit gesture without changing selection.
+        if (
+            ev.pointerType === 'touch' ||
+            ev.pointerType === 'pen'
+        ) {
+            this.pickCandidates.set(ev.pointerId, {
                 pointerId: ev.pointerId,
+                pointerType: ev.pointerType,
                 startX: ev.clientX,
                 startY: ev.clientY,
                 hit: this.pickBody(ev),
                 moved: false,
             })
 
-            if (this.touchPicks.size > 1) {
-                for (const candidate of this.touchPicks.values()) {
-                    candidate.moved = true
-                }
+            if (ev.pointerType === 'touch') {
+                this.markMultipleTouchesMoved()
             }
             return
         }
@@ -336,23 +362,27 @@ export class XBotPoseSelectMode extends InputHandler {
             return
         }
 
-        if (ev.pointerType === 'touch') {
-            const candidate = this.touchPicks.get(ev.pointerId)
+        if (
+            ev.pointerType === 'touch' ||
+            ev.pointerType === 'pen'
+        ) {
+            const candidate = this.pickCandidates.get(ev.pointerId)
             if (candidate !== undefined) {
                 const moved = Math.hypot(
                     ev.clientX - candidate.startX,
                     ev.clientY - candidate.startY,
                 )
 
-                if (moved >= TOUCH_TAP_MOVE_THRESHOLD) {
+                if (moved >= DIRECT_TAP_MOVE_THRESHOLD) {
                     candidate.moved = true
                 }
 
-                if (this.touchPicks.size > 1) {
-                    for (const other of this.touchPicks.values()) {
-                        other.moved = true
-                    }
+                if (ev.pointerType === 'touch') {
+                    this.markMultipleTouchesMoved()
                 }
+
+                // BasicMode gets the same event and performs one-finger or
+                // Pencil orbit, or the existing two-finger pan/pinch gesture.
                 return
             }
         }
@@ -384,10 +414,13 @@ export class XBotPoseSelectMode extends InputHandler {
     }
 
     override pointerup(ev: PointerEvent): void {
-        if (ev.pointerType === 'touch') {
-            const candidate = this.touchPicks.get(ev.pointerId)
+        if (
+            ev.pointerType === 'touch' ||
+            ev.pointerType === 'pen'
+        ) {
+            const candidate = this.pickCandidates.get(ev.pointerId)
             if (candidate !== undefined) {
-                this.touchPicks.delete(ev.pointerId)
+                this.pickCandidates.delete(ev.pointerId)
 
                 if (!candidate.moved) {
                     if (candidate.hit === undefined) {
@@ -400,6 +433,9 @@ export class XBotPoseSelectMode extends InputHandler {
                         this.app.glview.invalidate()
                     }
                 }
+
+                // Do not preventDefault here. BasicMode must also see this
+                // pointer-up so it can clean up touch/Pencil navigation state.
                 return
             }
         }
@@ -426,13 +462,20 @@ export class XBotPoseSelectMode extends InputHandler {
     }
 
     override pointercancel(ev: PointerEvent): void {
-        if (ev.pointerType === 'touch') {
-            this.touchPicks.delete(ev.pointerId)
+        if (
+            ev.pointerType === 'touch' ||
+            ev.pointerType === 'pen'
+        ) {
+            this.pickCandidates.delete(ev.pointerId)
 
-            // If iPadOS interrupts a touch gesture, any remaining touch
-            // candidates should not later be treated as clean taps.
-            for (const candidate of this.touchPicks.values()) {
-                candidate.moved = true
+            if (ev.pointerType === 'touch') {
+                // If iPadOS interrupts a touch gesture, any remaining touch
+                // candidates should not later be treated as clean taps.
+                for (const candidate of this.pickCandidates.values()) {
+                    if (candidate.pointerType === 'touch') {
+                        candidate.moved = true
+                    }
+                }
             }
         }
 

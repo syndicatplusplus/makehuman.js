@@ -15,3 +15,5 @@ src/net/fs_skel.ts
 src/net/fs_stub.ts
 package-lock.json
 static/external-models/
+update_makehumanjs_commands.txt
+update_makehumanjs_commands.md

@@ -1,6 +1,7 @@
 import { Application } from 'Application'
 import { mat4, vec4 } from 'gl-matrix'
 import { Button } from 'toad.js/viewkit/Button'
+import { POINTER_DEBUG_TOGGLE_EVENT } from 'gl/input/BasicMode'
 
 const PAN_STEP = 0.75
 const ZOOM_IN_FACTOR = 0.82
@@ -67,6 +68,28 @@ function centerSelected(app: Application) {
 export function ViewportControls(props: { app: Application }) {
     const app = props.app
     let expanded = false
+    let diagnosticsVisible = false
+    let diagnosticsButton: HTMLElement
+
+    const toggleDiagnostics = () => {
+        diagnosticsVisible = !diagnosticsVisible
+
+        window.dispatchEvent(
+            new CustomEvent<boolean>(POINTER_DEBUG_TOGGLE_EVENT, {
+                detail: diagnosticsVisible,
+            }),
+        )
+
+        diagnosticsButton.textContent = diagnosticsVisible
+            ? 'Hide input diagnostics'
+            : 'Show input diagnostics'
+    }
+
+    diagnosticsButton = (
+        <Button action={toggleDiagnostics}>
+            Show input diagnostics
+        </Button>
+    ) as HTMLElement
 
     const panel = (
         <div
@@ -115,6 +138,16 @@ export function ViewportControls(props: { app: Application }) {
 
             <Button action={() => centerSelected(app)}>Center</Button>
             <Button action={() => resetView(app)}>Reset view</Button>
+
+            <div
+                style={{
+                    marginTop: '4px',
+                    paddingTop: '8px',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.14)',
+                }}
+            >
+                {diagnosticsButton}
+            </div>
         </div>
     ) as HTMLDivElement
 

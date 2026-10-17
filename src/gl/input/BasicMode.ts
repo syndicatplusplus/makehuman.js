@@ -20,6 +20,14 @@ const WHEEL_ZOOM_SPEED = 0.0015
 const TOUCH_ORBIT_THRESHOLD = 8
 const TOUCH_ORBIT_DEGREES_PER_PIXEL = 0.35
 
+// Keep Pencil movement deliberate enough that a small tap wobble still
+// behaves like a tap in Pose mode instead of nudging the camera.
+const PEN_ORBIT_THRESHOLD = 12
+const PEN_ORBIT_DEGREES_PER_PIXEL = 0.35
+
+export const POINTER_DEBUG_TOGGLE_EVENT =
+    'nyanposer-pointer-debug-toggle'
+
 function distance(a: Point, b: Point): number {
     return Math.hypot(b.x - a.x, b.y - a.y)
 }
@@ -49,6 +57,68 @@ export class BasicMode extends InputHandler {
     private _touchStartMidpoint: Point | undefined
     private _touchStartDistance = 0
 
+    // Apple Pencil / stylus navigation.
+    //
+    // Pose handlers get the event first. If the Pencil lands on a gizmo ring,
+    // they consume it for joint rotation. Otherwise they let it continue here,
+    // where a Pencil drag orbits the viewport. A Pencil tap can therefore
+    // still select a body part without fighting the camera.
+    private _penPointerId: number | undefined
+    private _penStartPoint: Point | undefined
+    private _penCamera: mat4 | undefined
+    private _penCenter: vec3 | undefined
+
+    // Optional browser-input diagnostic. Hidden by default and toggled from
+    // the View panel so it remains available for future touch/stylus debugging.
+    private _pointerDebugVisible = false
+    private _pointerDebugElement: HTMLDivElement | undefined
+
+    private _pointerDebug = (ev: PointerEvent) => {
+        if (
+            !this._pointerDebugVisible ||
+            this._pointerDebugElement === undefined
+        ) {
+            return
+        }
+
+        const stylus = ev as PointerEvent & {
+            altitudeAngle?: number
+            azimuthAngle?: number
+        }
+
+        const fmt = (value: number | undefined, digits = 2): string =>
+            value === undefined
+                ? 'n/a'
+                : Number.isFinite(value)
+                    ? value.toFixed(digits)
+                    : String(value)
+
+        this._pointerDebugElement.textContent = [
+            'INPUT DIAGNOSTICS',
+            `event: ${ev.type}`,
+            `pointerType: ${ev.pointerType || '(empty)'}`,
+            `pointerId: ${ev.pointerId}`,
+            `isPrimary: ${ev.isPrimary}`,
+            `button/buttons: ${ev.button} / ${ev.buttons}`,
+            `pressure: ${fmt(ev.pressure)}`,
+            `size: ${fmt(ev.width, 1)} x ${fmt(ev.height, 1)}`,
+            `tiltX / tiltY: ${fmt(ev.tiltX, 0)} / ${fmt(ev.tiltY, 0)}`,
+            `twist: ${fmt(ev.twist, 0)}`,
+            `altitude: ${fmt(stylus.altitudeAngle)}`,
+            `azimuth: ${fmt(stylus.azimuthAngle)}`,
+        ].join('\n')
+    }
+
+    private _togglePointerDebug = (ev: Event) => {
+        const custom = ev as CustomEvent<boolean>
+        this._pointerDebugVisible = custom.detail === true
+
+        if (this._pointerDebugElement !== undefined) {
+            this._pointerDebugElement.style.display =
+                this._pointerDebugVisible ? 'block' : 'none'
+        }
+    }
+
     private _wheel = (ev: WheelEvent) => {
         ev.preventDefault()
 
@@ -77,16 +147,106 @@ export class BasicMode extends InputHandler {
         // Safari/iPad should leave canvas gestures to us rather than turning
         // them into page scrolling or browser zoom.
         this._view.canvas.style.touchAction = 'none'
+
+        const debug = document.createElement('div')
+        debug.textContent =
+            'INPUT DIAGNOSTICS\nTouch the viewport with Pencil, finger, or mouse.'
+        debug.style.display = 'none'
+        debug.style.position = 'fixed'
+        debug.style.right = '12px'
+        debug.style.bottom = '12px'
+        debug.style.padding = '10px 12px'
+        debug.style.border = '2px solid #ffd166'
+        debug.style.borderRadius = '8px'
+        debug.style.background = 'rgba(0, 0, 0, 0.88)'
+        debug.style.color = '#ffffff'
+        debug.style.fontFamily = 'monospace'
+        debug.style.fontSize = '12px'
+        debug.style.lineHeight = '1.35'
+        debug.style.whiteSpace = 'pre'
+        debug.style.pointerEvents = 'none'
+        debug.style.userSelect = 'none'
+        debug.style.zIndex = '2147483647'
+
+        this._pointerDebugElement = debug
+
+        // BasicMode is constructed before main.tsx replaces document.body's
+        // initial children with the NYANPOSER application. If we append the
+        // diagnostic immediately, that replacement deletes it. Defer the
+        // append until the next animation frame so the finished app shell is
+        // already in the document.
+        requestAnimationFrame(() => {
+            if (this._pointerDebugElement === debug && !debug.isConnected) {
+                document.body.appendChild(debug)
+            }
+        })
+
+        // Capture-phase listeners see the raw browser event before Pose mode
+        // decides whether to consume it.
+        this._view.canvas.addEventListener(
+            'pointerdown',
+            this._pointerDebug,
+            true,
+        )
+        this._view.canvas.addEventListener(
+            'pointermove',
+            this._pointerDebug,
+            true,
+        )
+        this._view.canvas.addEventListener(
+            'pointerup',
+            this._pointerDebug,
+            true,
+        )
+        this._view.canvas.addEventListener(
+            'pointercancel',
+            this._pointerDebug,
+            true,
+        )
+
+        window.addEventListener(
+            POINTER_DEBUG_TOGGLE_EVENT,
+            this._togglePointerDebug as EventListener,
+        )
     }
 
     override destructor(): void {
         this._view.canvas.removeEventListener('wheel', this._wheel)
+        this._view.canvas.removeEventListener(
+            'pointerdown',
+            this._pointerDebug,
+            true,
+        )
+        this._view.canvas.removeEventListener(
+            'pointermove',
+            this._pointerDebug,
+            true,
+        )
+        this._view.canvas.removeEventListener(
+            'pointerup',
+            this._pointerDebug,
+            true,
+        )
+        this._view.canvas.removeEventListener(
+            'pointercancel',
+            this._pointerDebug,
+            true,
+        )
+        window.removeEventListener(
+            POINTER_DEBUG_TOGGLE_EVENT,
+            this._togglePointerDebug as EventListener,
+        )
+
+        this._pointerDebugElement?.remove()
+        this._pointerDebugElement = undefined
+
         this.resetTouchState()
+        this.resetPenState()
         this.resetMouseState()
     }
 
     override info() {
-        return 'Viewport: drag orbit; two-finger drag pan; pinch zoom'
+        return 'Viewport: drag orbit; Pencil drag orbit; two-finger drag pan; pinch zoom'
     }
 
     override keydown(ev: KeyboardEvent): void {
@@ -184,6 +344,13 @@ export class BasicMode extends InputHandler {
         this._touchStartDistance = 0
     }
 
+    private resetPenState() {
+        this._penPointerId = undefined
+        this._penStartPoint = undefined
+        this._penCamera = undefined
+        this._penCenter = undefined
+    }
+
     private restartTouchGestureAfterPointerEnds() {
         if (this._touches.size >= 2) {
             this.beginTwoFingerTouch()
@@ -270,6 +437,16 @@ export class BasicMode extends InputHandler {
         this._touchCenter = undefined
     }
 
+    private beginPenOrbit(ev: PointerEvent) {
+        this._penPointerId = ev.pointerId
+        this._penStartPoint = {
+            x: ev.clientX,
+            y: ev.clientY,
+        }
+        this._penCamera = mat4.clone(this._view.ctx.camera)
+        this._penCenter = this._view.selectionCenter()
+    }
+
     override pointerdown(ev: PointerEvent): void {
         if (ev.pointerType === 'touch') {
             const point = { x: ev.clientX, y: ev.clientY }
@@ -283,6 +460,17 @@ export class BasicMode extends InputHandler {
                 this.beginSingleTouch(point)
             }
 
+            ev.preventDefault()
+            return
+        }
+
+        if (ev.pointerType === 'pen') {
+            if (ev.button !== MouseButton.LEFT) {
+                return
+            }
+
+            this._view.canvas.setPointerCapture(ev.pointerId)
+            this.beginPenOrbit(ev)
             ev.preventDefault()
             return
         }
@@ -367,7 +555,8 @@ export class BasicMode extends InputHandler {
                 this._touchCenter !== undefined &&
                 this._touchStartPoint !== undefined
             ) {
-                const point = this._touches.values().next().value as Point
+                const point =
+                    this._touches.values().next().value as Point
                 const dx = point.x - this._touchStartPoint.x
                 const dy = point.y - this._touchStartPoint.y
 
@@ -384,6 +573,29 @@ export class BasicMode extends InputHandler {
                 return
             }
 
+            return
+        }
+
+        if (
+            ev.pointerType === 'pen' &&
+            this._penPointerId === ev.pointerId &&
+            this._penStartPoint !== undefined &&
+            this._penCamera !== undefined &&
+            this._penCenter !== undefined
+        ) {
+            const dx = ev.clientX - this._penStartPoint.x
+            const dy = ev.clientY - this._penStartPoint.y
+
+            if (Math.hypot(dx, dy) >= PEN_ORBIT_THRESHOLD) {
+                this.applyOrbit(
+                    this._penCamera,
+                    this._penCenter,
+                    dx * PEN_ORBIT_DEGREES_PER_PIXEL,
+                    dy * PEN_ORBIT_DEGREES_PER_PIXEL,
+                )
+            }
+
+            ev.preventDefault()
             return
         }
 
@@ -433,6 +645,16 @@ export class BasicMode extends InputHandler {
             return
         }
 
+        if (
+            ev.pointerType === 'pen' &&
+            this._penPointerId === ev.pointerId
+        ) {
+            this.releasePointerCapture(ev.pointerId)
+            this.resetPenState()
+            ev.preventDefault()
+            return
+        }
+
         if (this._down === undefined) {
             return
         }
@@ -449,6 +671,14 @@ export class BasicMode extends InputHandler {
             // ghost second finger and force later gestures into pan mode.
             this._touches.delete(ev.pointerId)
             this.restartTouchGestureAfterPointerEnds()
+            return
+        }
+
+        if (
+            ev.pointerType === 'pen' &&
+            this._penPointerId === ev.pointerId
+        ) {
+            this.resetPenState()
             return
         }
 

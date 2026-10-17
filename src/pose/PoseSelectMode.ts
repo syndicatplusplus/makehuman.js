@@ -38,8 +38,9 @@ interface GizmoRing {
     label: ScreenPoint
 }
 
-interface TouchPickCandidate {
+interface PickCandidate {
     pointerId: number
+    pointerType: string
     startX: number
     startY: number
     hit?: PickResult
@@ -53,14 +54,21 @@ const GIZMO_OFFSET = 118
 const GIZMO_EDGE_MARGIN = 82
 const GIZMO_PICK_DISTANCE = 8
 const TOUCH_GIZMO_PICK_DISTANCE = 18
-const TOUCH_TAP_MOVE_THRESHOLD = 12
+const DIRECT_TAP_MOVE_THRESHOLD = 12
 const GIZMO_SEGMENTS = 64
 const GIZMO_DEGREES_PER_PIXEL = 0.75
+
+const POSE_MIN_DEGREES = -180
+const POSE_MAX_DEGREES = 180
 
 const GIZMO_COLORS: Record<GizmoAxis, string> = {
     x: '#ff5f56',
     y: '#5bd66f',
     z: '#4da3ff',
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value))
 }
 
 function pointSegmentDistance(
@@ -152,7 +160,7 @@ export class PoseSelectMode extends InputHandler {
     private hoverValue?: string
     private hoverAxis?: GizmoAxis
     private gizmoDrag?: GizmoDrag
-    private touchPicks = new Map<number, TouchPickCandidate>()
+    private pickCandidates = new Map<number, PickCandidate>()
 
     constructor(
         app: Application,
@@ -184,10 +192,12 @@ export class PoseSelectMode extends InputHandler {
     }
 
     override info(): string {
-        return 'Pose: left-click body parts to select; drag X/Y/Z rings to rotate; middle-drag to orbit'
+        return 'Pose: tap/click body parts to select; drag X/Y/Z rings to rotate; Pencil drag to orbit'
     }
 
     override destructor(): void {
+        this.pickCandidates.clear()
+        this.gizmoDrag = undefined
         this.overlayGroup.remove()
         this.app.glview.canvas.style.cursor = ''
     }
@@ -248,17 +258,37 @@ export class PoseSelectMode extends InputHandler {
         return center
     }
 
+    private markMultipleTouchesMoved(): void {
+        let touchCount = 0
+
+        for (const candidate of this.pickCandidates.values()) {
+            if (candidate.pointerType === 'touch') {
+                ++touchCount
+            }
+        }
+
+        if (touchCount <= 1) {
+            return
+        }
+
+        for (const candidate of this.pickCandidates.values()) {
+            if (candidate.pointerType === 'touch') {
+                candidate.moved = true
+            }
+        }
+    }
+
     override pointerdown(ev: PointerEvent): void {
         if (ev.button !== MouseButton.LEFT) {
             return
         }
 
-        // The gizmo gets first chance at the click.
+        // The gizmo gets first chance at the pointer. Pencil on a ring should
+        // rotate the joint, not orbit the camera.
         const axis = this.pickGizmo(ev)
         if (axis !== undefined) {
             const placement = this.getGizmoPlacement()
             if (placement !== undefined) {
-                const center = placement.center
                 const rect = this.app.glview.canvas.getBoundingClientRect()
                 this.gizmoDrag = {
                     axis,
@@ -275,22 +305,24 @@ export class PoseSelectMode extends InputHandler {
             }
         }
 
-        // Touch taps select, while touch drags are reserved for viewport
-        // navigation. Delay the selection until pointer-up so a finger can
-        // naturally turn into an orbit gesture without selecting by accident.
-        if (ev.pointerType === 'touch') {
-            this.touchPicks.set(ev.pointerId, {
+        // Finger and Pencil taps select. Their drags are reserved for viewport
+        // navigation, so delay selection until pointer-up. BasicMode receives
+        // the same unconsumed events and performs the actual orbit gesture.
+        if (
+            ev.pointerType === 'touch' ||
+            ev.pointerType === 'pen'
+        ) {
+            this.pickCandidates.set(ev.pointerId, {
                 pointerId: ev.pointerId,
+                pointerType: ev.pointerType,
                 startX: ev.clientX,
                 startY: ev.clientY,
                 hit: this.pickBody(ev),
                 moved: false,
             })
 
-            if (this.touchPicks.size > 1) {
-                for (const candidate of this.touchPicks.values()) {
-                    candidate.moved = true
-                }
+            if (ev.pointerType === 'touch') {
+                this.markMultipleTouchesMoved()
             }
 
             return
@@ -338,7 +370,15 @@ export class PoseSelectMode extends InputHandler {
 
                     if (Math.abs(delta) > 0.01) {
                         const model = this.axisModels[this.gizmoDrag.axis]
-                        model.value = model.value + delta
+                        const nextValue = clamp(
+                            model.value + delta,
+                            POSE_MIN_DEGREES,
+                            POSE_MAX_DEGREES,
+                        )
+
+                        if (nextValue !== model.value) {
+                            model.value = nextValue
+                        }
                     }
                 }
             }
@@ -351,26 +391,27 @@ export class PoseSelectMode extends InputHandler {
             return
         }
 
-        if (ev.pointerType === 'touch') {
-            const candidate = this.touchPicks.get(ev.pointerId)
+        if (
+            ev.pointerType === 'touch' ||
+            ev.pointerType === 'pen'
+        ) {
+            const candidate = this.pickCandidates.get(ev.pointerId)
             if (candidate !== undefined) {
                 const moved = Math.hypot(
                     ev.clientX - candidate.startX,
                     ev.clientY - candidate.startY,
                 )
 
-                if (moved >= TOUCH_TAP_MOVE_THRESHOLD) {
+                if (moved >= DIRECT_TAP_MOVE_THRESHOLD) {
                     candidate.moved = true
                 }
 
-                if (this.touchPicks.size > 1) {
-                    for (const other of this.touchPicks.values()) {
-                        other.moved = true
-                    }
+                if (ev.pointerType === 'touch') {
+                    this.markMultipleTouchesMoved()
                 }
 
-                // BasicMode gets the same event and performs the actual
-                // one-finger orbit / two-finger pan+pinch gesture.
+                // BasicMode receives the same event and performs one-finger or
+                // Pencil orbit, or the existing two-finger pan/pinch gesture.
                 return
             }
         }
@@ -403,11 +444,14 @@ export class PoseSelectMode extends InputHandler {
     }
 
     override pointerup(ev: PointerEvent): void {
-        if (ev.pointerType === 'touch') {
-            const candidate = this.touchPicks.get(ev.pointerId)
+        if (
+            ev.pointerType === 'touch' ||
+            ev.pointerType === 'pen'
+        ) {
+            const candidate = this.pickCandidates.get(ev.pointerId)
 
             if (candidate !== undefined) {
-                this.touchPicks.delete(ev.pointerId)
+                this.pickCandidates.delete(ev.pointerId)
 
                 if (!candidate.moved) {
                     if (candidate.hit === undefined) {
@@ -421,8 +465,8 @@ export class PoseSelectMode extends InputHandler {
                     }
                 }
 
-                // Do not preventDefault here. BasicMode must also see this
-                // pointer-up so it can clean up its active touch gesture.
+                // Do not preventDefault here. BasicMode must also receive the
+                // pointer-up so it can release touch/Pencil capture and state.
                 return
             }
         }
@@ -440,6 +484,32 @@ export class PoseSelectMode extends InputHandler {
         this.app.glview.canvas.style.cursor = this.hoverAxis ? 'grab' : ''
         this.app.glview.invalidate()
         ev.preventDefault()
+    }
+
+    override pointercancel(ev: PointerEvent): void {
+        if (
+            ev.pointerType === 'touch' ||
+            ev.pointerType === 'pen'
+        ) {
+            this.pickCandidates.delete(ev.pointerId)
+
+            if (ev.pointerType === 'touch') {
+                // Interrupted multi-touch candidates should never later be
+                // mistaken for clean taps.
+                for (const candidate of this.pickCandidates.values()) {
+                    if (candidate.pointerType === 'touch') {
+                        candidate.moved = true
+                    }
+                }
+            }
+        }
+
+        if (this.gizmoDrag !== undefined) {
+            this.gizmoDrag = undefined
+            this.hoverAxis = undefined
+            this.app.glview.canvas.style.cursor = ''
+            this.app.glview.invalidate()
+        }
     }
 
     override paint(): void {

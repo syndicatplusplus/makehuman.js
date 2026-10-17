@@ -9,8 +9,7 @@ created dist/makehuman.js ...
 
 followed by the build:chai step and then your normal $ prompt returning.
 
-2. Recreate the production folder
-Once the build succeeds, run:
+2. Recreate the production folder. Once the build succeeds, run:
 
 rm -rf /z/github/makehuman-deploy
 mkdir -p /z/github/makehuman-deploy
@@ -20,24 +19,3 @@ Then verify it:
 
 du -sh /z/github/makehuman-deploy
 ls /z/github/makehuman-deploy
-
-You should see:
-data
-dist
-favicon.ico
-index.html
-static
-style
-
-And because we're copying the whole static directory, your X Bot JSON comes along automatically too.
-3. Copy that folder to NYANPOSER-WEB
-Then replace the contents of the NAS share with the contents of:
-Z:\github\makehuman-deploy
-
-So the root of NYANPOSER-WEB should once again directly contain:
-data/
-dist/
-static/
-style/
-favicon.ico
-index.html

@@ -121,6 +121,19 @@ export class RenderXBot extends RenderHandler {
         return this.data?.armature.bones.some((bone) => bone.name === name) ?? false
     }
 
+    getBoneNames(): string[] {
+        return this.data?.armature.bones.map((bone) => bone.name) ?? []
+    }
+
+    getBoneRestMatrix(name: string): mat4 | undefined {
+        const bone = this.data?.armature.bones.find(
+            (candidate) => candidate.name === name,
+        )
+        return bone === undefined
+            ? undefined
+            : jsonMatrix(bone.bindMatrix)
+    }
+
     getBoneRotation(name: string): XBotRotation {
         const rotation = this.poseDegrees.get(name)
         if (rotation === undefined) {

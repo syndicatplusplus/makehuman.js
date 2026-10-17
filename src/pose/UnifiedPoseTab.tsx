@@ -26,6 +26,11 @@ import {
 } from './PoseEvents'
 import { PoseSelectMode } from './PoseSelectMode'
 import {
+    mirrorHumanPose,
+    mirrorXBotPose,
+    PoseMirrorAction,
+} from './PoseMirror'
+import {
     commitPoseHistory,
     queuePoseHistoryRecord,
     registerPoseHistoryAdapter,
@@ -83,6 +88,60 @@ function PoseAxis(props: {
                 <TextField model={props.model} />
                 <Slider model={props.model} />
             </div>
+        </div>
+    )
+}
+
+function PoseSymmetryControls(props: {
+    apply: (action: PoseMirrorAction) => void
+}) {
+    return (
+        <div
+            style={{
+                margin: '18px 0 24px 0',
+                padding: '14px',
+                border: '1px solid var(--tx-gray-60)',
+                borderRadius: '8px',
+            }}
+        >
+            <div
+                style={{
+                    fontWeight: '700',
+                    marginBottom: '10px',
+                }}
+            >
+                Pose symmetry
+            </div>
+
+            <div
+                style={{
+                    display: 'flex',
+                    gap: '8px',
+                    flexWrap: 'wrap',
+                }}
+            >
+                <Button action={() => props.apply('mirror')}>
+                    Mirror pose
+                </Button>
+                <Button action={() => props.apply('left-to-right')}>
+                    Left → Right
+                </Button>
+                <Button action={() => props.apply('right-to-left')}>
+                    Right → Left
+                </Button>
+            </div>
+
+            <p
+                style={{
+                    margin: '10px 0 0 0',
+                    opacity: 0.65,
+                    lineHeight: '1.4',
+                }}
+            >
+                Mirror swaps the complete left/right pose. Copy buttons leave
+                the source side unchanged and replace only the opposite side.
+                Each operation is one undoable history step.
+            </p>
         </div>
     )
 }
@@ -360,6 +419,29 @@ export function UnifiedPoseTab(props: {
 
     loadXBotSelectedBone()
 
+    const applyHumanSymmetry = (action: PoseMirrorAction) => {
+        // Finish any pending slider edit first so symmetry is its own undo step.
+        commitHumanControlsToBone(humanControlsBone)
+        commitPoseHistory('human')
+
+        mirrorHumanPose(app, action)
+        announcePoseChanged()
+        loadHumanSelectedBone()
+
+        commitPoseHistory('human')
+    }
+
+    const applyXBotSymmetry = (action: PoseMirrorAction) => {
+        commitXBotControlsToBone(xbotControlsBone)
+        commitPoseHistory('xbot')
+
+        mirrorXBotPose(xbotRenderer, action)
+        syncAllXBotPoseControls()
+        loadXBotSelectedBone()
+
+        commitPoseHistory('xbot')
+    }
+
     /*
      * Pose undo / redo. Each history entry is a complete pose snapshot, so an
      * undo remains correct even when several bones were changed by a hand
@@ -571,6 +653,10 @@ export function UnifiedPoseTab(props: {
                     }}
                 />
 
+                <PoseSymmetryControls
+                    apply={applyHumanSymmetry}
+                />
+
                 <div style={{ margin: '20px 0 26px 0' }}>
                     <div style={{ marginBottom: '8px' }}>
                         <strong>Body part</strong>
@@ -652,6 +738,10 @@ export function UnifiedPoseTab(props: {
                         syncAllXBotPoseControls()
                         commitPoseHistory('xbot')
                     }}
+                />
+
+                <PoseSymmetryControls
+                    apply={applyXBotSymmetry}
                 />
 
                 <div style={{ margin: '20px 0 26px 0' }}>
